@@ -12,6 +12,7 @@ const synth = window.speechSynthesis;
 let currentUtterance = null; // 현재 발화 중인 SpeechSynthesisUtterance 객체
 let isPaused = false;
 let isSpeaking = false;
+let wakeLock = null; // [NEW] Wake Lock 객체: 절전/화면 잠금 방지용
 
 // DOM 요소 캐시
 const $ = (selector) => document.querySelector(selector);
@@ -157,6 +158,39 @@ function populateVoiceList() {
 function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
+
+// --- Wake Lock API (절전/화면 잠금 방지) ---
+
+async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            // 'screen' 타입으로 화면을 켜진 상태로 유지
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => {
+                console.log('Wake Lock released by system or manually.');
+            });
+            console.log('Wake Lock requested. Screen lock prevented.');
+        } catch (err) {
+            console.warn(`Wake Lock request failed (일반적): ${err.name}, ${err.message}`);
+        }
+    }
+}
+
+function releaseWakeLock() {
+    if (wakeLock) {
+        wakeLock.release()
+            .then(() => {
+                wakeLock = null;
+                console.log('Wake Lock released successfully.');
+            })
+            .catch((err) => {
+                // 이미 해제된 경우 등 오류 발생 가능
+                console.error(`Wake Lock release failed: ${err.name}, ${err.message}`);
+            });
+    }
+}
+
+// ----------------------------------------
 
 // --- 파일 처리 및 분할 기능 ---
 
@@ -317,7 +351,6 @@ function handleFiles(event) {
             }
             
             // 2차 시도: UTF-8 실패 징후 (Replacement Character: )가 있거나 내용이 비어있으면 windows-949로 재시도
-            // windows-949는 한국어 ANSI/CP949 인코딩으로 EUC-KR보다 포괄적
             if (content.includes('\ufffd') || !content) {
                 try {
                     content = await readTextFile(file, 'windows-949');
@@ -485,6 +518,8 @@ function startReadingFromCurrentChunk() {
 
     synth.cancel();
     
+    requestWakeLock(); // [NEW FEATURE] 재생 시작 시 Wake Lock 요청
+    
     speakNextChunk();
 }
 
@@ -497,7 +532,8 @@ function speakNextChunk() {
         if (isSequential) {
             changeFile(currentFileIndex + 1);
         } else {
-            stopReading();
+            // 정주행이 아니면 재생 목록 끝에서 멈춥니다.
+            stopReading(); // stopReading 내부에서 releaseWakeLock() 호출
         }
         return;
     }
@@ -534,10 +570,12 @@ function togglePlayPause() {
         synth.pause();
         isPaused = true;
         $playPauseBtn.textContent = '▶️';
+        releaseWakeLock(); // 일시정지 시 Wake Lock 해제 (선택 사항)
     } else if (isSpeaking && isPaused) {
         synth.resume();
         isPaused = false;
         $playPauseBtn.textContent = '⏸️';
+        requestWakeLock(); // 다시 재생 시 Wake Lock 요청
     } else {
         startReadingFromCurrentChunk();
     }
@@ -549,6 +587,8 @@ function stopReading() {
     isPaused = false;
     currentChunkIndex = 0; 
     $playPauseBtn.textContent = '▶️';
+    
+    releaseWakeLock(); // [NEW FEATURE] 정지 시 Wake Lock 해제
     
     if(currentFileIndex !== -1) {
         renderTextViewer(currentFileIndex); 
@@ -580,6 +620,9 @@ function changeFile(newIndex) {
 
 // --- 파일 목록 관리 기능 ---
 
+/**
+ * [FIX] 개별 파일 삭제 및 재생 시작 로직 통합
+ */
 function handleFileListItemClick(e) {
     const li = e.target.closest('li');
     if (!li) return;
@@ -588,23 +631,40 @@ function handleFileListItemClick(e) {
     const fileIndex = filesData.findIndex(f => f.id === fileId);
     if (fileIndex === -1) return;
 
+    // 1. 삭제 버튼 클릭 시 (Issue 2 Fix: deleteFile 호출 후 즉시 반환)
     if (e.target.classList.contains('delete-file-btn')) {
         deleteFile(fileIndex);
-        return;
+        return; 
     }
     
+    // 2. 순서 변경 버튼 클릭 시
     if (e.target.classList.contains('drag-handle')) {
         return;
     }
 
-    if (fileIndex !== currentFileIndex) {
+    // 3. 파일 이름 영역 클릭 시 (Issue 1 Fix: 다른 파일 클릭 시 자동 재생)
+    const isFileChanged = fileIndex !== currentFileIndex;
+
+    if (isFileChanged) {
+        stopReading(); // 기존 재생 중지 (Wake Lock 해제 포함)
+        
         currentFileIndex = fileIndex;
         currentChunkIndex = 0; 
-        renderTextViewer(currentFileIndex);
-    } else if (currentFileIndex === fileIndex && !isSpeaking) {
-        startReadingFromCurrentChunk();
     }
     
+    // 재생 시작 로직 (파일이 변경되었거나, 같은 파일인데 재생 중이 아닐 때)
+    if (isFileChanged || (!isSpeaking && currentFileIndex === fileIndex)) {
+        if (!filesData[currentFileIndex].isProcessed) {
+             // 청크 처리 후 재생 시작
+             processFileChunks(currentFileIndex, true); 
+        } else {
+             // 즉시 재생 시작
+             startReadingFromCurrentChunk(); 
+        }
+    }
+    
+    // UI 업데이트
+    renderFileList();
     renderTextViewer(currentFileIndex);
 }
 
@@ -750,6 +810,7 @@ function jumpToChunk(index) {
     $playPauseBtn.textContent = '⏸️';
 
     renderTextViewer(currentFileIndex);
+    requestWakeLock(); // 점프 재생 시작 시 Wake Lock 요청
     speakNextChunk();
 }
 
