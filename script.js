@@ -1,6 +1,6 @@
 // --- 전역 변수 설정 ---
-const MAX_FILES = 20;
-const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수 (Web Speech API 안정성 고려)
+const MAX_FILES = 50;
+const CHUNK_SIZE_LIMIT = 300; // 한 번에 발화할 텍스트의 최대 글자 수 (Web Speech API 안정성 고려)
 
 let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
