@@ -156,13 +156,13 @@ function updateRateDisplay() {
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     
-    // CORS 문제를 해결하기 위한 프록시 URL. 실제 사용 시 여기에 유효한 프록시 URL을 입력해야 합니다.
-    const PROXY_URL = ''; 
+    // CORS 문제를 해결하기 위한 공용 프록시 URL 설정.
+    const PROXY_URL = 'https://cors-anywhere.herokuapp.com/'; 
 
     const targetUrl = PROXY_URL + url;
     
     try {
-        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다. (CORS 문제로 실패할 수 있습니다)...</p>';
+        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다. (CORS 우회를 위해 프록시 서버를 사용합니다)...</p>';
         stopReading(); 
 
         const response = await fetch(targetUrl);
@@ -217,7 +217,7 @@ async function fetchAndProcessUrlContent(url) {
         $urlTextInput.value = '';
 
     } catch (error) {
-        alert(`URL 로드 실패: ${error.message}. Cross-Origin Resource Sharing (CORS) 오류일 가능성이 높습니다. 프록시를 사용하거나 CORS를 해제해보세요.`);
+        alert(`URL 로드 실패: ${error.message}. 공용 프록시 서버(https://cors-anywhere.herokuapp.com/)를 먼저 방문하여 'Request temporary access' 버튼을 눌렀는지 확인해보세요.`);
         $textViewer.innerHTML = `<p style="color:red;">오류 발생: ${error.message}</p>`;
         renderFileList();
     }
