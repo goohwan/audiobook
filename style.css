@@ -5,7 +5,7 @@ body {
     padding: 0;
     /* 다크 모드 배경색 설정 */
     background-color: #1a1a1a; 
-    color: #e0e0e0; /* 기본 텍스트 색상 밝게 */
+    color: #eeeeee; /* 기본 텍스트 색상 밝게 */
 }
 
 header {
@@ -18,11 +18,11 @@ header {
 /* 1. 좌우 분할 레이아웃 (PC 버전) */
 .app-container {
     display: flex;
-    height: calc(100vh - 50px);
+    height: calc(100vh - 50px); /* 헤더 높이 제외 */
 }
 
 .file-panel {
-    flex: 0 0 300px;
+    flex: 0 0 300px; /* 파일 목록 패널 고정 너비 */
     padding: 20px;
     /* 패널 배경을 어둡게 */
     background-color: #242424; 
@@ -31,10 +31,10 @@ header {
 }
 
 .reader-panel {
-    flex-grow: 1;
+    flex-grow: 1; /* 남은 공간 모두 사용 */
     padding: 20px;
     display: flex;
-    flex-direction: column;
+    flex-direction: column; /* 내부 요소 수직 배열 */
 }
 
 /* 2. 텍스트 뷰어 스타일 */
@@ -46,17 +46,17 @@ header {
     background-color: #121212; 
     border: 1px solid #333; 
     line-height: 1.8;
-    white-space: pre-wrap;
-    color: #eee; /* 뷰어 텍스트 색상을 아주 밝게 */
+    white-space: pre-wrap; /* 텍스트 줄바꿈 유지 */
+    color: #eeeeee; /* 뷰어 텍스트 색상을 아주 밝게 */
 }
 
 /* 3. 새로운 최상단 컨트롤 바 스타일 */
 .top-controls-bar {
     display: flex;
-    justify-content: space-between;
+    justify-content: space-between; /* 양쪽 끝으로 배치 */
     align-items: center;
     margin-bottom: 15px;
-    flex-wrap: wrap;
+    flex-wrap: wrap; /* 모바일에서 요소가 넘치지 않도록 */
 }
 
 /* TTS 설정 컨트롤 */
@@ -98,23 +98,23 @@ header {
 /* 4. 모바일 반응형 (화면 너비 768px 이하) */
 @media (max-width: 768px) {
     .app-container {
-        flex-direction: column;
+        flex-direction: column; /* 세로로 쌓기 */
         height: auto;
     }
 
     .file-panel {
-        order: 2;
+        order: 2; /* 파일 목록을 아래로 이동 */
         border-right: none;
         border-top: 1px solid #444;
     }
 
     .reader-panel {
-        order: 1;
-        height: 60vh;
+        order: 1; /* 읽기 패널을 위로 이동 */
+        height: 60vh; /* 모바일에서 일정 높이 확보 */
     }
     
     .top-controls-bar {
-        flex-direction: column;
+        flex-direction: column; /* 모바일에서 수직으로 쌓기 */
         align-items: flex-start;
     }
     .controls-settings, .controls-playback {
@@ -169,5 +169,16 @@ header {
     color: #ffffff; /* 하이라이트된 텍스트는 더 밝게 */
     transition: background-color 0.3s;
     padding: 2px 0;
-    display: inline;
+    display: block; /* 청크 전체를 클릭 가능하도록 블록 설정 */
+}
+
+/* 8. 재생 위치 이동을 위한 청크 스타일 */
+.text-chunk {
+    cursor: pointer; /* 마우스 오버 시 클릭 가능함을 표시 */
+    display: block; /* 각 청크가 독립적인 블록 요소처럼 동작하도록 (클릭 영역 확보) */
+    margin-bottom: 5px; /* 청크 간 약간의 여백 */
+    padding: 2px;
+}
+.text-chunk:hover:not(.highlight) {
+    background-color: #333333; /* 마우스 오버 시 배경색 변경 (다크모드에 맞춰 어둡게) */
 }
