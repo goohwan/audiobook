@@ -3,7 +3,7 @@ const MAX_FILES = 20;
 const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수 (Web Speech API 안정성 고려)
 const PRELOAD_CHUNK_COUNT = 10; // 초기 재생을 위해 미리 분할할 텍스트 청크 수
 
-let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, text, chunks, isProcessed })
+let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
 
@@ -53,10 +53,10 @@ document.addEventListener('DOMContentLoaded', () => {
     $rateSlider.addEventListener('input', updateRateDisplay);
     $rateSlider.addEventListener('change', () => saveBookmark());
 
-    // 4. 북마크 로드
+    // 4. 북마크 로드 (설정 복원)
     loadBookmark();
     
-    // 5. 텍스트 뷰어 클릭 이벤트 설정 (재생 위치 이동 핵심 로직)
+    // 5. 텍스트 뷰어 클릭 이벤트 설정
     setupTextViewerClickEvent();
 });
 
@@ -89,7 +89,7 @@ function populateVoiceList() {
         if (voice.lang.includes('ko')) {
             koreanVoices.push(option);
             
-            // Google 목소리 패턴 찾기 (Google, TTS, Standard, Wavenet 등이 이름에 포함된 경우)
+            // Google 목소리 패턴 찾기
             if (voice.name.includes('Google') || voice.name.includes('Standard') || voice.name.includes('Wavenet')) {
                  googleKoreanVoiceName = voice.name;
             }
@@ -103,7 +103,6 @@ function populateVoiceList() {
     if (googleKoreanVoiceName) {
         preferredVoiceName = googleKoreanVoiceName;
     } else if (koreanVoices.length > 0) {
-        // Google TTS가 없으면 첫 번째 한국어 목소리 선택
         preferredVoiceName = koreanVoices[0].value;
     }
 
@@ -112,7 +111,6 @@ function populateVoiceList() {
 
     if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
          selectedVoice = savedBookmark.settings.voice;
-         $rateSlider.value = savedBookmark.settings.rate;
     } else if (preferredVoiceName) {
          selectedVoice = preferredVoiceName;
     }
@@ -120,6 +118,12 @@ function populateVoiceList() {
     if(selectedVoice) {
          $voiceSelect.value = selectedVoice;
     }
+    
+    // 속도 설정도 여기서 업데이트 (loadBookmark에서 중복 처리 방지)
+    if (savedBookmark && savedBookmark.settings) {
+        $rateSlider.value = savedBookmark.settings.rate;
+    }
+
     updateRateDisplay();
 }
 
@@ -133,7 +137,7 @@ function updateRateDisplay() {
 // --- 파일 처리 및 분할 기능 ---
 
 /**
- * 파일 입력 이벤트 핸들러.
+ * 파일 입력 이벤트 핸들러. (북마크 복원 로직 개선)
  */
 function handleFiles(event) {
     const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
@@ -149,33 +153,48 @@ function handleFiles(event) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const fileId = Date.now() + filesData.length;
-            filesData.push({
+            // 1. 파일 데이터 준비
+            const newFileData = {
                 id: fileId,
                 name: file.name,
                 fullText: e.target.result,
                 chunks: [],
                 isProcessed: false 
-            });
+            };
+            filesData.push(newFileData);
             renderFileList();
             
             const newFileIndex = filesData.length - 1;
 
+            let shouldResume = false;
+            
+            // 2. 북마크 체크 및 대화형 프롬프트 (가장 중요한 수정 부분)
             if (bookmarkData) {
                 const bookmark = JSON.parse(bookmarkData);
-                if (file.name === bookmark.fileName) { // 파일 이름이 같은 경우 북마크 복원 시도
-                    currentFileIndex = newFileIndex;
-                    currentChunkIndex = bookmark.chunkIndex;
-                    alert(`[북마크 복원] ${file.name}의 저장된 위치부터 이어서 읽으시겠습니까?`);
-                    processFileChunks(newFileIndex, true); 
-                    return;
+                // 파일 이름이 일치하는 경우
+                if (file.name === bookmark.fileName) { 
+                    const resume = confirm(`[북마크 복원] "${file.name}"의 저장된 위치(${bookmark.chunkIndex + 1}번째 청크)부터 이어서 읽으시겠습니까? \n\n'확인'을 누르면 이어서 읽고, '취소'를 누르면 처음부터 읽습니다.`);
+
+                    if (resume) {
+                        currentFileIndex = newFileIndex;
+                        currentChunkIndex = bookmark.chunkIndex;
+                        shouldResume = true;
+                        // 즉시 처리하고 재생 준비
+                        processFileChunks(newFileIndex, true); 
+                    }
                 }
             }
-
-            if (currentFileIndex === -1) {
-                currentFileIndex = newFileIndex;
-                processFileChunks(currentFileIndex, true);
-            } else {
-                setTimeout(() => processFileChunks(newFileIndex, false), 100);
+            
+            // 3. 기본 로직 (북마크가 없거나, 복원하지 않기로 선택한 경우)
+            if (!shouldResume) {
+                if (currentFileIndex === -1) {
+                    // 첫 파일이면 현재 파일로 설정하고 처리 시작 (읽기 준비)
+                    currentFileIndex = newFileIndex;
+                    processFileChunks(currentFileIndex, true);
+                } else {
+                    // 이미 다른 파일이 선택되어 있으면, 백그라운드에서 처리 예약
+                    setTimeout(() => processFileChunks(newFileIndex, false), 100);
+                }
             }
         };
         reader.readAsText(file, 'UTF-8');
@@ -239,17 +258,18 @@ function processFileChunks(fileIndex, startReading) {
         file.chunks.push(currentChunk.trim());
     }
     
-    if (startReading && file.chunks.length >= PRELOAD_CHUNK_COUNT) {
+    if (file.chunks.length > 0) {
         file.isProcessed = true;
+    }
+
+    if (startReading) {
         renderTextViewer(fileIndex); // 텍스트 뷰어 렌더링
         if (currentFileIndex === fileIndex) {
             startReadingFromCurrentChunk(); 
         }
-    } else if (!startReading) {
-        file.isProcessed = true;
-        if (fileIndex < filesData.length - 1) {
-             setTimeout(() => processFileChunks(fileIndex + 1, false), 100);
-        }
+    } else if (!startReading && fileIndex < filesData.length - 1) {
+        // 백그라운드 처리 완료 후 다음 파일 처리 예약
+        setTimeout(() => processFileChunks(fileIndex + 1, false), 100);
     }
 }
 
@@ -306,7 +326,7 @@ function speakNextChunk() {
     // 발화 종료 이벤트 (정주행 로직의 핵심)
     currentUtterance.onend = () => {
         currentChunkIndex++;
-        saveBookmark(); // 매 문장 끝날 때마다 북마크 자동 저장
+        saveBookmark(); // 매 청크 끝날 때마다 북마크 자동 저장
         setTimeout(speakNextChunk, 50); 
     };
     
@@ -321,7 +341,7 @@ function speakNextChunk() {
  * 재생/일시정지 토글. (조건 7)
  */
 function togglePlayPause() {
-    if (filesData.length === 0) return;
+    if (currentFileIndex === -1) return;
 
     if (isSpeaking && !isPaused) {
         synth.pause();
@@ -367,7 +387,8 @@ function changeFile(newIndex) {
     currentChunkIndex = 0; // 새 파일은 처음부터 시작
     
     if (!filesData[newIndex].isProcessed) {
-        processFileChunks(newIndex, false);
+        // 다음 파일이 처리되지 않았다면 처리 시작 (읽기 시작을 위해)
+        processFileChunks(newIndex, true);
     }
     
     renderTextViewer(newIndex); // 텍스트 뷰어 렌더링
@@ -384,8 +405,11 @@ function changeFile(newIndex) {
  * @param {number} fileIndex - 파일 인덱스
  */
 function renderTextViewer(fileIndex) {
-    if (fileIndex === -1 || !filesData[fileIndex]) {
-        $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
+    if (fileIndex === -1 || !filesData[fileIndex] || !filesData[fileIndex].isProcessed) {
+        // 파일이 없거나 아직 처리되지 않은 경우, 원본 텍스트 표시
+        const text = fileIndex !== -1 ? filesData[fileIndex].fullText : '';
+        $textViewer.innerHTML = text.replace(/\n/g, '<br>') || '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
+        renderFileList();
         return;
     }
     
@@ -394,7 +418,6 @@ function renderTextViewer(fileIndex) {
     let htmlContent = '';
     
     allChunks.forEach((chunk, index) => {
-        // 줄바꿈 문자 처리
         let chunkHtml = chunk.replace(/\n/g, '<br>');
         
         // 현재 발화 중이거나 일시정지된 청크에만 하이라이트 적용
@@ -429,7 +452,6 @@ function scrollToCurrentChunk() {
  */
 function setupTextViewerClickEvent() {
     $textViewer.addEventListener('click', (e) => {
-        // 클릭된 요소 또는 가장 가까운 .text-chunk 요소를 찾습니다.
         const chunkElement = e.target.closest('.text-chunk');
         if (!chunkElement) return;
 
@@ -475,6 +497,7 @@ function renderFileList() {
         
         li.addEventListener('click', () => {
             if (index !== currentFileIndex) {
+                // 파일 변경 시, 해당 파일이 처리되지 않았다면 처리 시작 플래그를 true로 넘겨줌
                 changeFile(index);
             }
         });
@@ -491,7 +514,7 @@ function saveBookmark() {
     
     const bookmarkData = {
         fileId: filesData[currentFileIndex].id,
-        fileName: filesData[currentFileIndex].name, // 파일 이름 추가 (재첨부 시 매칭용)
+        fileName: filesData[currentFileIndex].name, // 파일 이름 추가 (복원 시 매칭용)
         chunkIndex: currentChunkIndex,
         settings: { 
             voice: $voiceSelect.value, 
@@ -502,7 +525,7 @@ function saveBookmark() {
 }
 
 /**
- * localStorage에서 북마크를 로드합니다. (조건 8)
+ * localStorage에서 북마크 설정만 로드합니다. (파일 위치 복원은 handleFiles에서 처리)
  */
 function loadBookmark() {
     const data = localStorage.getItem('autumnReaderBookmark');
@@ -510,7 +533,9 @@ function loadBookmark() {
 
     const bookmark = JSON.parse(data);
     
-    // 설정은 populateVoiceList에서 복원되거나 이 시점에서 복원됩니다.
-    
-    alert(`[북마크] 이전 세션에서 "${bookmark.fileName}"의 읽기 위치(${bookmark.chunkIndex + 1}번째 문장)가 저장되었습니다. 해당 파일을 다시 첨부하면 이어서 읽을 수 있습니다.`);
+    // 설정 복원 (목소리 설정은 populateVoiceList에서 처리)
+    if (bookmark.settings) {
+         $rateSlider.value = bookmark.settings.rate;
+         updateRateDisplay();
+    }
 }
