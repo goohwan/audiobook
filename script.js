@@ -24,9 +24,13 @@ const $rateSlider = $('#rate-slider');
 const $rateDisplay = $('#rate-display');
 const $playPauseBtn = $('#play-pause-btn');
 
-// --- 클립보드 관련 DOM 요소 추가 ---
+// --- 클립보드 관련 DOM 요소
 const $clipboardTextInput = $('#clipboard-text-input');
 const $loadClipboardBtn = $('#load-clipboard-btn');
+
+// --- URL 관련 DOM 요소 추가
+const $urlTextInput = $('#url-text-input');
+const $loadUrlBtn = $('#load-url-btn');
 // ----------------------------------------
 
 // --- 초기화 및 이벤트 리스너 ---
@@ -64,8 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // 5. 텍스트 뷰어 클릭 이벤트 설정
     setupTextViewerClickEvent();
 
-    // 6. 클립보드 입력 이벤트 설정 (새로운 부분)
+    // 6. 클립보드 입력 이벤트 설정
     $loadClipboardBtn.addEventListener('click', handleClipboardText);
+
+    // 7. URL 입력 이벤트 설정 (새로운 부분)
+    $loadUrlBtn.addEventListener('click', handleUrlText);
 });
 
 // 브라우저 종료 전 북마크 저장 (조건 8)
@@ -144,6 +151,91 @@ function updateRateDisplay() {
 // --- 파일 처리 및 분할 기능 ---
 
 /**
+ * URL에서 텍스트를 가져와 뷰어에 로드하고 처리합니다. (새로 추가된 비동기 함수)
+ */
+async function fetchAndProcessUrlContent(url) {
+    if (!url) return;
+    
+    // CORS 문제를 해결하기 위한 프록시 URL. 실제 사용 시 여기에 유효한 프록시 URL을 입력해야 합니다.
+    const PROXY_URL = ''; 
+
+    const targetUrl = PROXY_URL + url;
+    
+    try {
+        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다. (CORS 문제로 실패할 수 있습니다)...</p>';
+        stopReading(); 
+
+        const response = await fetch(targetUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP 오류: ${response.status}`);
+        }
+        
+        const htmlText = await response.text();
+
+        // 텍스트에서 ID 'novel_content'의 innerText를 추출 (DOMParser 사용)
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+        const novelContentElement = doc.getElementById('novel_content');
+
+        let text = '';
+        if (novelContentElement) {
+            // textContent를 사용하여 요소 내의 모든 텍스트를 가져옵니다.
+            text = novelContentElement.textContent || '';
+            text = text.trim();
+        } else {
+            throw new Error("페이지에서 ID 'novel_content' 요소를 찾을 수 없습니다.");
+        }
+
+        if (text.length < 50) { // 너무 짧은 텍스트는 오류로 간주
+             throw new Error("추출된 텍스트 내용이 너무 짧습니다. (요소 ID 또는 페이지 내용 확인 필요)");
+        }
+
+        // 파일 데이터 구조로 변환
+        const fileId = Date.now();
+        const fileName = `[URL] ${url.substring(0, 30)}...`;
+
+        const newFileData = {
+            id: fileId,
+            name: fileName,
+            fullText: text,
+            chunks: [],
+            isProcessed: false 
+        };
+
+        filesData.unshift(newFileData);
+        
+        if (filesData.length > MAX_FILES) {
+            filesData.pop(); 
+        }
+
+        currentFileIndex = 0;
+        currentChunkIndex = 0;
+        
+        renderFileList();
+        processFileChunks(currentFileIndex, true);
+
+        $urlTextInput.value = '';
+
+    } catch (error) {
+        alert(`URL 로드 실패: ${error.message}. Cross-Origin Resource Sharing (CORS) 오류일 가능성이 높습니다. 프록시를 사용하거나 CORS를 해제해보세요.`);
+        $textViewer.innerHTML = `<p style="color:red;">오류 발생: ${error.message}</p>`;
+        renderFileList();
+    }
+}
+
+/**
+ * URL 로드 버튼 클릭 핸들러 (새로 추가된 함수)
+ */
+function handleUrlText() {
+    const url = $urlTextInput.value.trim();
+    if (url) {
+        fetchAndProcessUrlContent(url);
+    } else {
+        alert("URL을 입력해주세요.");
+    }
+}
+
+/**
  * 클립보드 입력 텍스트를 처리하여 뷰어에 로드합니다.
  */
 function handleClipboardText() {
@@ -165,23 +257,18 @@ function handleClipboardText() {
         isProcessed: false 
     };
 
-    // 클립보드 텍스트를 목록 맨 앞에 추가
     filesData.unshift(newFileData);
     
     if (filesData.length > MAX_FILES) {
         filesData.pop(); 
     }
 
-    // 현재 읽을 파일 인덱스를 0으로 설정
     currentFileIndex = 0;
     currentChunkIndex = 0;
     
     renderFileList();
-
-    // 텍스트 분할 처리 및 재생 시작
     processFileChunks(currentFileIndex, true);
 
-    // 입력 필드 초기화
     $clipboardTextInput.value = '';
 }
 
@@ -203,7 +290,7 @@ function handleFiles(event) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const fileId = Date.now() + filesData.length;
-            // 1. 파일 데이터 준비
+            
             const newFileData = {
                 id: fileId,
                 name: file.name,
@@ -221,7 +308,6 @@ function handleFiles(event) {
             // 2. 북마크 체크 및 대화형 프롬프트
             if (bookmarkData) {
                 const bookmark = JSON.parse(bookmarkData);
-                // 파일 이름이 일치하는 경우
                 if (file.name === bookmark.fileName) { 
                     const resume = confirm(`[북마크 복원] "${file.name}"의 저장된 위치(${bookmark.chunkIndex + 1}번째 청크)부터 이어서 읽으시겠습니까? \n\n'확인'을 누르면 이어서 읽고, '취소'를 누르면 처음부터 읽습니다.`);
 
@@ -229,20 +315,17 @@ function handleFiles(event) {
                         currentFileIndex = newFileIndex;
                         currentChunkIndex = bookmark.chunkIndex;
                         shouldResume = true;
-                        // 즉시 처리하고 재생 준비
                         processFileChunks(newFileIndex, true); 
                     }
                 }
             }
             
-            // 3. 기본 로직 (북마크가 없거나, 복원하지 않기로 선택한 경우)
+            // 3. 기본 로직 
             if (!shouldResume) {
                 if (currentFileIndex === -1) {
-                    // 첫 파일이면 현재 파일로 설정하고 처리 시작 (읽기 준비)
                     currentFileIndex = newFileIndex;
                     processFileChunks(currentFileIndex, true);
                 } else {
-                    // 이미 다른 파일이 선택되어 있으면, 백그라운드에서 처리 예약
                     setTimeout(() => processFileChunks(newFileIndex, false), 100);
                 }
             }
@@ -313,12 +396,11 @@ function processFileChunks(fileIndex, startReading) {
     }
 
     if (startReading) {
-        renderTextViewer(fileIndex); // 텍스트 뷰어 렌더링
+        renderTextViewer(fileIndex); 
         if (currentFileIndex === fileIndex) {
             startReadingFromCurrentChunk(); 
         }
     } else if (!startReading && fileIndex < filesData.length - 1) {
-        // 백그라운드 처리 완료 후 다음 파일 처리 예약
         setTimeout(() => processFileChunks(fileIndex + 1, false), 100);
     }
 }
@@ -339,7 +421,7 @@ function startReadingFromCurrentChunk() {
 
     currentChunkIndex = Math.min(currentChunkIndex, file.chunks.length - 1);
     
-    renderTextViewer(currentFileIndex); // 텍스트 뷰어에 현재 파일의 전체 텍스트 로드 및 하이라이트
+    renderTextViewer(currentFileIndex); 
     
     isSpeaking = true;
     isPaused = false;
@@ -364,7 +446,7 @@ function speakNextChunk() {
     }
 
     const textToSpeak = file.chunks[currentChunkIndex];
-    renderTextViewer(currentFileIndex); // 하이라이트 업데이트 및 스크롤
+    renderTextViewer(currentFileIndex); 
 
     currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
     
@@ -376,7 +458,7 @@ function speakNextChunk() {
     // 발화 종료 이벤트 (정주행 로직의 핵심)
     currentUtterance.onend = () => {
         currentChunkIndex++;
-        saveBookmark(); // 매 청크 끝날 때마다 북마크 자동 저장
+        saveBookmark(); 
         setTimeout(speakNextChunk, 50); 
     };
     
@@ -413,12 +495,12 @@ function stopReading() {
     synth.cancel();
     isSpeaking = false;
     isPaused = false;
-    currentChunkIndex = 0; // 정지하면 처음부터 다시 시작
+    currentChunkIndex = 0; 
     $playPauseBtn.textContent = '▶️';
     
     // 하이라이팅 초기화
     if(currentFileIndex !== -1) {
-        renderTextViewer(currentFileIndex); // 하이라이트 제거 후 텍스트 렌더링
+        renderTextViewer(currentFileIndex); 
     }
 }
 
@@ -432,16 +514,15 @@ function changeFile(newIndex) {
         return;
     }
     
-    synth.cancel(); // 현재 발화 중단
+    synth.cancel(); 
     currentFileIndex = newIndex;
-    currentChunkIndex = 0; // 새 파일은 처음부터 시작
+    currentChunkIndex = 0; 
     
     if (!filesData[newIndex].isProcessed) {
-        // 다음 파일이 처리되지 않았다면 처리 시작 (읽기 시작을 위해)
         processFileChunks(newIndex, true);
     }
     
-    renderTextViewer(newIndex); // 텍스트 뷰어 렌더링
+    renderTextViewer(newIndex); 
     
     if (isSpeaking) {
         startReadingFromCurrentChunk();
@@ -456,7 +537,6 @@ function changeFile(newIndex) {
  */
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex] || !filesData[fileIndex].isProcessed) {
-        // 파일이 없거나 아직 처리되지 않은 경우, 원본 텍스트 표시
         const text = fileIndex !== -1 ? filesData[fileIndex].fullText : '';
         $textViewer.innerHTML = text.replace(/\n/g, '<br>') || '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
         renderFileList();
@@ -470,10 +550,8 @@ function renderTextViewer(fileIndex) {
     allChunks.forEach((chunk, index) => {
         let chunkHtml = chunk.replace(/\n/g, '<br>');
         
-        // 현재 발화 중이거나 일시정지된 청크에만 하이라이트 적용
         const isCurrentChunk = index === currentChunkIndex && (isSpeaking || isPaused);
 
-        // 각 청크를 클릭 가능한 span으로 감싸고 data-index 속성을 부여
         htmlContent += `<span class="text-chunk ${isCurrentChunk ? 'highlight' : ''}" data-index="${index}">${chunkHtml}</span>`;
     });
 
@@ -568,7 +646,7 @@ function saveBookmark() {
     
     const bookmarkData = {
         fileId: filesData[currentFileIndex].id,
-        fileName: filesData[currentFileIndex].name, // 파일 이름 추가 (복원 시 매칭용)
+        fileName: filesData[currentFileIndex].name, 
         chunkIndex: currentChunkIndex,
         settings: { 
             voice: $voiceSelect.value, 
@@ -587,7 +665,6 @@ function loadBookmark() {
 
     const bookmark = JSON.parse(data);
     
-    // 설정 복원 (목소리 설정은 populateVoiceList에서 처리)
     if (bookmark.settings) {
          $rateSlider.value = bookmark.settings.rate;
          updateRateDisplay();

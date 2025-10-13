@@ -226,3 +226,42 @@ header {
 #load-clipboard-btn:hover {
     background-color: #00897b;
 }
+
+/* 10. URL 입력 영역 스타일 */
+.url-input-area {
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px solid #444;
+    background-color: #1f1f1f;
+    border-radius: 6px;
+}
+.url-input-area h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #ffffff;
+    font-size: 1.1em;
+}
+#url-text-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    margin-bottom: 10px;
+    /* 다크 모드 입력 필드 스타일 */
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+}
+#load-url-btn {
+    width: 100%;
+    padding: 10px;
+    cursor: pointer;
+    background-color: #1a73e8; /* 구글 블루 계열로 변경 */
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+}
+#load-url-btn:hover {
+    background-color: #0d47a1;
+}
