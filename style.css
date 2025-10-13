@@ -5,7 +5,7 @@ body {
     padding: 0;
     /* 다크 모드 배경색 설정 */
     background-color: #1a1a1a; 
-    color: #eeeeee; /* 기본 텍스트 색상 밝게 */
+    color: #e0e0e0; /* 기본 텍스트 색상 밝게 */
 }
 
 header {
@@ -47,7 +47,7 @@ header {
     border: 1px solid #333; 
     line-height: 1.8;
     white-space: pre-wrap; /* 텍스트 줄바꿈 유지 */
-    color: #eeeeee; /* 뷰어 텍스트 색상을 아주 밝게 */
+    color: #f0f0f0; /* 뷰어 텍스트 색상을 아주 밝게 */
 }
 
 /* 3. 새로운 최상단 컨트롤 바 스타일 */
@@ -181,4 +181,45 @@ header {
 }
 .text-chunk:hover:not(.highlight) {
     background-color: #333333; /* 마우스 오버 시 배경색 변경 (다크모드에 맞춰 어둡게) */
+}
+
+/* 9. 클립보드 입력 영역 스타일 */
+.clipboard-input-area {
+    margin-top: 20px;
+    padding: 15px;
+    border: 1px solid #444;
+    background-color: #1f1f1f;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+.clipboard-input-area h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #ffffff;
+    font-size: 1.1em;
+}
+#clipboard-text-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    margin-bottom: 10px;
+    /* 다크 모드 입력 필드 스타일 */
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    resize: vertical;
+}
+#load-clipboard-btn {
+    width: 100%;
+    padding: 10px;
+    cursor: pointer;
+    background-color: #00796b; /* 눈에 띄는 색상 */
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+}
+#load-clipboard-btn:hover {
+    background-color: #00897b;
 }

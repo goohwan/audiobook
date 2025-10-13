@@ -24,6 +24,11 @@ const $rateSlider = $('#rate-slider');
 const $rateDisplay = $('#rate-display');
 const $playPauseBtn = $('#play-pause-btn');
 
+// --- 클립보드 관련 DOM 요소 추가 ---
+const $clipboardTextInput = $('#clipboard-text-input');
+const $loadClipboardBtn = $('#load-clipboard-btn');
+// ----------------------------------------
+
 // --- 초기화 및 이벤트 리스너 ---
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -58,6 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 5. 텍스트 뷰어 클릭 이벤트 설정
     setupTextViewerClickEvent();
+
+    // 6. 클립보드 입력 이벤트 설정 (새로운 부분)
+    $loadClipboardBtn.addEventListener('click', handleClipboardText);
 });
 
 // 브라우저 종료 전 북마크 저장 (조건 8)
@@ -119,7 +127,6 @@ function populateVoiceList() {
          $voiceSelect.value = selectedVoice;
     }
     
-    // 속도 설정도 여기서 업데이트 (loadBookmark에서 중복 처리 방지)
     if (savedBookmark && savedBookmark.settings) {
         $rateSlider.value = savedBookmark.settings.rate;
     }
@@ -135,6 +142,49 @@ function updateRateDisplay() {
 }
 
 // --- 파일 처리 및 분할 기능 ---
+
+/**
+ * 클립보드 입력 텍스트를 처리하여 뷰어에 로드합니다. (새로운 함수)
+ */
+function handleClipboardText() {
+    const text = $clipboardTextInput.value.trim();
+    if (!text) {
+        alert("붙여넣기할 텍스트가 없습니다.");
+        return;
+    }
+
+    // 파일 업로드와 동일한 데이터 구조로 변환
+    const fileId = Date.now();
+    const fileName = `[클립보드] ${new Date().toLocaleTimeString()}`;
+
+    const newFileData = {
+        id: fileId,
+        name: fileName,
+        fullText: text,
+        chunks: [],
+        isProcessed: false 
+    };
+
+    // 클립보드 텍스트를 목록 맨 앞에 추가
+    filesData.unshift(newFileData);
+    
+    if (filesData.length > MAX_FILES) {
+        filesData.pop(); 
+    }
+
+    // 현재 읽을 파일 인덱스를 0으로 설정
+    currentFileIndex = 0;
+    currentChunkIndex = 0;
+    
+    renderFileList();
+
+    // 텍스트 분할 처리 및 재생 시작
+    processFileChunks(currentFileIndex, true);
+
+    // 입력 필드 초기화
+    $clipboardTextInput.value = '';
+}
+
 
 /**
  * 파일 입력 이벤트 핸들러. (북마크 복원 로직 개선)
@@ -168,7 +218,7 @@ function handleFiles(event) {
 
             let shouldResume = false;
             
-            // 2. 북마크 체크 및 대화형 프롬프트 (가장 중요한 수정 부분)
+            // 2. 북마크 체크 및 대화형 프롬프트
             if (bookmarkData) {
                 const bookmark = JSON.parse(bookmarkData);
                 // 파일 이름이 일치하는 경우
@@ -497,7 +547,6 @@ function renderFileList() {
         
         li.addEventListener('click', () => {
             if (index !== currentFileIndex) {
-                // 파일 변경 시, 해당 파일이 처리되지 않았다면 처리 시작 플래그를 true로 넘겨줌
                 changeFile(index);
             }
         });

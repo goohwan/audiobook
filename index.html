@@ -21,7 +21,13 @@
                 <input type="file" id="file-input" accept=".txt" multiple style="display: none;">
                 <button id="file-upload-btn">파일 첨부하기 (최대 20개)</button>
             </div>
-
+            
+            <div class="clipboard-input-area">
+                <h3>📄 클립보드 텍스트 입력</h3>
+                <textarea id="clipboard-text-input" placeholder="여기에 텍스트를 붙여넣으세요 (Ctrl+V 또는 Cmd+V)" rows="5"></textarea>
+                <button id="load-clipboard-btn">텍스트 읽기 시작</button>
+            </div>
+            
             <ul id="file-list" class="file-list">
                 </ul>
         </section>
