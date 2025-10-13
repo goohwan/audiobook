@@ -144,7 +144,7 @@ function updateRateDisplay() {
 // --- 파일 처리 및 분할 기능 ---
 
 /**
- * 클립보드 입력 텍스트를 처리하여 뷰어에 로드합니다. (새로운 함수)
+ * 클립보드 입력 텍스트를 처리하여 뷰어에 로드합니다.
  */
 function handleClipboardText() {
     const text = $clipboardTextInput.value.trim();
@@ -498,12 +498,17 @@ function scrollToCurrentChunk() {
 
 
 /**
- * 텍스트 뷰어에 클릭 이벤트를 설정하여 재생 위치를 이동합니다.
+ * 텍스트 뷰어에 클릭 이벤트를 설정하여 재생 위치를 이동합니다. (현재 하이라이트된 청크 클릭 방지 로직 추가)
  */
 function setupTextViewerClickEvent() {
     $textViewer.addEventListener('click', (e) => {
         const chunkElement = e.target.closest('.text-chunk');
         if (!chunkElement) return;
+        
+        // 현재 하이라이트된 청크(.highlight)라면 클릭 이벤트를 무시
+        if (chunkElement.classList.contains('highlight')) {
+            return; 
+        }
 
         const newChunkIndex = parseInt(chunkElement.dataset.index);
         if (isNaN(newChunkIndex)) return;

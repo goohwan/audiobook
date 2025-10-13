@@ -174,10 +174,13 @@ header {
 
 /* 8. 재생 위치 이동을 위한 청크 스타일 */
 .text-chunk {
-    cursor: pointer; /* 마우스 오버 시 클릭 가능함을 표시 */
+    cursor: pointer; /* 기본적으로 클릭 가능함을 표시 */
     display: block; /* 각 청크가 독립적인 블록 요소처럼 동작하도록 (클릭 영역 확보) */
     margin-bottom: 5px; /* 청크 간 약간의 여백 */
     padding: 2px;
+}
+.text-chunk.highlight {
+    cursor: default; /* 재생 중인 청크는 클릭 불가 (커서 변경) */
 }
 .text-chunk:hover:not(.highlight) {
     background-color: #333333; /* 마우스 오버 시 배경색 변경 (다크모드에 맞춰 어둡게) */
