@@ -1,6 +1,6 @@
 // --- 전역 변수 설정 ---
-const MAX_FILES = 50;
-const CHUNK_SIZE_LIMIT = 300; // 한 번에 발화할 텍스트의 최대 글자 수 (Web Speech API 안정성 고려)
+const MAX_FILES = 50; // 파일 첨부 최대 개수 50개로 설정
+const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수 (Web Speech API 안정성 고려)
 
 let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
@@ -104,7 +104,7 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-// --- 목소리 및 설정 기능 (이전과 동일) ---
+// --- 목소리 및 설정 기능 ---
 
 function populateVoiceList() {
     const voices = synth.getVoices();
@@ -161,7 +161,7 @@ function updateRateDisplay() {
 // --- 파일 처리 및 분할 기능 ---
 
 /**
- * URL에서 텍스트를 가져와 뷰어에 로드하고 처리합니다. (새로운 프록시 적용)
+ * URL에서 텍스트를 가져와 뷰어에 로드하고 처리합니다.
  */
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
@@ -272,59 +272,101 @@ function handleClipboardText() {
 }
 
 
+/**
+ * 파일 입력 이벤트 핸들러. (Promise.all을 사용해 파일 로딩 후 정렬 및 처리)
+ */
 function handleFiles(event) {
     const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
-
+    
+    // --- 파일 개수 제한 로직 ---
     if (filesData.length + newFiles.length > MAX_FILES) {
         alert(`최대 ${MAX_FILES}개 파일만 첨부할 수 있습니다.`);
         newFiles.splice(MAX_FILES - filesData.length); 
     }
     
+    if (newFiles.length === 0) {
+        event.target.value = '';
+        return;
+    }
+    // ----------------------------
+
     const bookmarkData = localStorage.getItem('autumnReaderBookmark');
-    
-    newFiles.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const fileId = Date.now() + filesData.length;
-            
-            const newFileData = {
-                id: fileId,
-                name: file.name,
-                fullText: e.target.result,
-                chunks: [],
-                isProcessed: false 
+    let resumeTargetFileName = JSON.parse(bookmarkData)?.fileName;
+    let chunkIndexForResume = JSON.parse(bookmarkData)?.chunkIndex || 0;
+    let newFileIndexForResume = -1;
+
+    // 1. 모든 파일 읽기를 Promise로 감싸서 비동기 처리
+    const filePromises = newFiles.map(file => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                // ID는 고유성을 위해 Date.now() + Math.random() 사용
+                const fileId = Date.now() + Math.random(); 
+                
+                const newFileData = {
+                    id: fileId,
+                    name: file.name,
+                    fullText: e.target.result,
+                    chunks: [],
+                    isProcessed: false 
+                };
+                resolve(newFileData);
             };
-            filesData.push(newFileData);
-            renderFileList();
-            
-            const newFileIndex = filesData.length - 1;
-
-            let shouldResume = false;
-            
-            // 북마크 복원 로직은 유지
-            if (bookmarkData) {
-                const bookmark = JSON.parse(bookmarkData);
-                if (file.name === bookmark.fileName) { 
-                    const resume = confirm(`[북마크 복원] "${file.name}"의 저장된 위치(${bookmark.chunkIndex + 1}번째 청크)부터 이어서 읽으시겠습니까?`);
-
-                    if (resume) {
-                        currentFileIndex = newFileIndex;
-                        currentChunkIndex = bookmark.chunkIndex;
-                        shouldResume = true;
-                        // 북마크 복원 시에만 재생 시작 (startReading=true)
-                        processFileChunks(newFileIndex, true); 
-                    }
-                }
-            }
-            
-            // 파일 첨부 시 자동 재생 방지: currentFileIndex를 변경하지 않고 청크만 처리
-            if (!shouldResume) {
-                // 비동기로 청크만 처리
-                setTimeout(() => processFileChunks(newFileIndex, false), 100);
-            }
-        };
-        reader.readAsText(file, 'UTF-8');
+            // UTF-8로 읽기
+            reader.readAsText(file, 'UTF-8');
+        });
     });
+
+    // 2. 모든 파일 읽기가 완료되면 정렬 및 처리 시작
+    Promise.all(filePromises).then(newlyReadFiles => {
+        
+        // --- 파일명 기준 오름차순 정렬 (핵심 요구사항) ---
+        newlyReadFiles.sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
+
+        // 새로 추가되는 파일들이 filesData에 들어갈 시작 인덱스
+        const startIndex = filesData.length;
+        
+        // 3. 정렬된 파일을 filesData에 추가
+        filesData.push(...newlyReadFiles);
+        
+        // 4. 북마크 복원 대상 파일 확인 및 인덱스 설정
+        let shouldResume = false;
+        if (resumeTargetFileName) {
+            const resumeFileIndexInNewList = newlyReadFiles.findIndex(f => f.name === resumeTargetFileName);
+            if (resumeFileIndexInNewList !== -1) {
+                newFileIndexForResume = startIndex + resumeFileIndexInNewList;
+                shouldResume = true;
+            }
+        }
+        
+        // 5. 북마크 복원 프롬프트 및 로직 실행
+        if (shouldResume) {
+            const resume = confirm(`[북마크 복원] "${filesData[newFileIndexForResume].name}"의 저장된 위치(${chunkIndexForResume + 1}번째 청크)부터 이어서 읽으시겠습니까?`);
+
+            if (resume) {
+                currentFileIndex = newFileIndexForResume;
+                currentChunkIndex = chunkIndexForResume;
+                // 북마크 복원 시에만 재생 시작
+                processFileChunks(currentFileIndex, true); 
+                // 나머지 파일들은 비동기로 청크만 처리 (재생 시작 안 함)
+                processFileChunksInSequence(startIndex, currentFileIndex);
+            } else {
+                 // Resume 취소: 모든 파일 비동기 청크 처리 (재생 시작 안 함)
+                 processFileChunksInSequence(startIndex, -1);
+            }
+        } else {
+            // 북마크 대상 파일이 없거나, 기존 파일이 없다면 첫 번째 파일을 현재 파일로 설정 (자동 재생은 안 함)
+            if (currentFileIndex === -1) {
+                currentFileIndex = startIndex; 
+            }
+            // 모든 파일 비동기 청크 처리 (재생 시작 안 함)
+            processFileChunksInSequence(startIndex, -1);
+        }
+        
+        // UI 갱신 (파일 리스트에 정렬된 순서대로 표시)
+        renderFileList();
+    });
+    
     event.target.value = '';
 }
 
@@ -386,10 +428,19 @@ function processFileChunks(fileIndex, startReading) {
         renderTextViewer(fileIndex); 
         startReadingFromCurrentChunk(); 
     } 
-    
-    // 다음 파일 청크 처리 (정주행이 아닌 경우에도 미리 처리)
-    if (fileIndex < filesData.length - 1) {
-        setTimeout(() => processFileChunks(fileIndex + 1, false), 100);
+}
+
+/**
+ * 새로 추가된 파일들 (startIndex부터)에 대해 비동기로 청크를 처리합니다.
+ * @param {number} startIndex - filesData에서 새로 추가된 파일의 시작 인덱스.
+ * @param {number} skipIndex - 이미 processFileChunks(..., true)로 처리 중인 파일 인덱스 (-1이면 없음).
+ */
+function processFileChunksInSequence(startIndex, skipIndex) {
+    for(let i = startIndex; i < filesData.length; i++) {
+        if (i === skipIndex) continue; // 이미 처리 중인 파일은 건너뜁니다.
+
+        // 파일 처리가 브라우저를 멈추지 않도록 작은 지연을 줍니다.
+        setTimeout(() => processFileChunks(i, false), 100 * (i - startIndex));
     }
 }
 
@@ -604,7 +655,7 @@ function clearAllFiles() {
 function setupFileListSortable() {
     // SortableJS가 index.html에서 로드되었는지 확인
     if (typeof Sortable === 'undefined') {
-        console.warn("SortableJS 라이브러리를 찾을 수 없습니다. 파일 순서 변경 기능이 작동하지 않습니다.");
+        // SortableJS 라이브러리가 로드되지 않은 경우 경고 후 종료
         return; 
     }
 
