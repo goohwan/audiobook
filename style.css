@@ -6,6 +6,13 @@ body {
     background-color: #f8f8f8;
 }
 
+header {
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    text-align: center;
+}
+
 /* 1. 좌우 분할 레이아웃 (PC 버전) */
 .app-container {
     display: flex;
@@ -35,9 +42,39 @@ body {
     border: 1px solid #eee;
     background-color: #fefefe;
     line-height: 1.8;
+    white-space: pre-wrap; /* 텍스트 줄바꿈 유지 */
 }
 
-/* 3. 모바일 반응형 (화면 너비 768px 이하) */
+/* 3. 새로운 최상단 컨트롤 바 스타일: 설정과 재생 버튼을 가로로 정렬 */
+.top-controls-bar {
+    display: flex;
+    justify-content: space-between; /* 양쪽 끝으로 배치 */
+    align-items: center;
+    margin-bottom: 15px;
+    flex-wrap: wrap; /* 모바일에서 요소가 넘치지 않도록 */
+}
+
+/* TTS 설정 컨트롤 */
+.controls-settings {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+/* 오디오 재생 컨트롤 */
+.controls-playback {
+    display: flex;
+    gap: 5px; /* 버튼 간격 좁힘 */
+    align-items: center;
+}
+.controls-playback button {
+    font-size: 24px;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+
+/* 4. 모바일 반응형 (화면 너비 768px 이하) */
 @media (max-width: 768px) {
     .app-container {
         flex-direction: column; /* 세로로 쌓기 */
@@ -55,18 +92,52 @@ body {
         order: 1; /* 읽기 패널을 위로 이동 */
         height: 60vh; /* 모바일에서 일정 높이 확보 */
     }
+    
+    .top-controls-bar {
+        flex-direction: column; /* 모바일에서 수직으로 쌓기 */
+        align-items: flex-start;
+    }
+    .controls-settings, .controls-playback {
+        width: 100%;
+        margin-bottom: 10px;
+    }
 }
 
-/* 4. 드래그 & 드롭 영역 스타일 */
+/* 5. 드래그 & 드롭 영역 스타일 */
 .drop-area {
     border: 2px dashed #ccc;
     padding: 20px;
     text-align: center;
     cursor: pointer;
+    margin-bottom: 20px;
+}
+.drop-area button {
+    padding: 8px 15px;
+    cursor: pointer;
 }
 
-/* 5. 하이라이트 스타일 (JS로 적용될 클래스) */
+/* 6. 파일 리스트 */
+.file-list {
+    list-style: none;
+    padding: 0;
+}
+.file-list li {
+    padding: 8px;
+    border-bottom: 1px dotted #eee;
+    cursor: pointer;
+    background-color: #f9f9f9;
+    margin-bottom: 5px;
+}
+.file-list li.active {
+    background-color: #e0f7fa; /* 현재 읽는 파일 색상 */
+    font-weight: bold;
+}
+
+
+/* 7. 하이라이트 스타일 (JS로 적용될 클래스) */
 .highlight {
     background-color: yellow;
     transition: background-color 0.3s;
+    padding: 2px 0; /* 가독성을 위해 패딩 추가 */
+    display: inline;
 }
