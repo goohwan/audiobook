@@ -47,7 +47,7 @@ header {
     border: 1px solid #333; 
     line-height: 1.8;
     white-space: pre-wrap;
-    color: #f0f0f0; /* 뷰어 텍스트 색상을 아주 밝게 */
+    color: #eee; /* 뷰어 텍스트 색상을 아주 밝게 */
 }
 
 /* 3. 새로운 최상단 컨트롤 바 스타일 */
