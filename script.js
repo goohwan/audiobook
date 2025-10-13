@@ -168,8 +168,6 @@ async function fetchAndProcessUrlContent(url) {
 
         const response = await fetch(targetUrl);
         if (!response.ok) {
-            // 참고: allorigins 프록시는 404가 나더라도 200 응답을 줄 때가 많으므로,
-            // 이 로직보다는 아래의 텍스트 추출 로직에서 오류가 발생할 가능성이 더 높습니다.
             throw new Error(`HTTP 오류: ${response.status}`);
         }
         
@@ -186,9 +184,8 @@ async function fetchAndProcessUrlContent(url) {
             text = novelContentElement.textContent || '';
             text = text.trim();
         } else {
-            throw new Error("페이지에서 ID 'novel_content' 요소를 찾을 수 없습니다. (프록시 실패 또는 대상 웹페이지 구조 변경)");
+            throw new Error("페이지에서 ID 'novel_content' 요소를 찾을 수 없습니다.");
         }
-// ... (이하 동일)
 
         if (text.length < 50) { // 너무 짧은 텍스트는 오류로 간주
              throw new Error("추출된 텍스트 내용이 너무 짧습니다. (요소 ID 또는 페이지 내용 확인 필요)");
@@ -221,7 +218,8 @@ async function fetchAndProcessUrlContent(url) {
         $urlTextInput.value = '';
 
     } catch (error) {
-        alert(`URL 로드 실패: ${error.message}. 공용 프록시 서버(https://cors-anywhere.herokuapp.com/)를 먼저 방문하여 'Request temporary access' 버튼을 눌렀는지 확인해보세요.`);
+        // 프록시 서버가 변경되었으므로, 해당 서버에 맞게 오류 메시지를 변경합니다.
+        alert(`URL 로드 실패: ${error.message}. 프록시 서버 문제일 수 있습니다. 다른 URL로 시도하거나 잠시 후 다시 시도해 보세요.`);
         $textViewer.innerHTML = `<p style="color:red;">오류 발생: ${error.message}</p>`;
         renderFileList();
     }
