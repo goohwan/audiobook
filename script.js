@@ -156,17 +156,20 @@ function updateRateDisplay() {
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     
-    // CORS 문제를 해결하기 위한 공용 프록시 URL 설정.
-    const PROXY_URL = 'https://cors-anywhere.herokuapp.com/'; 
+    // 💡 새로운 공용 프록시 서버 (api.allorigins.win)를 사용하여 CORS 문제를 우회합니다.
+    const PROXY_URL = 'https://api.allorigins.win/raw?url='; 
 
-    const targetUrl = PROXY_URL + url;
+    // 대상 URL을 URL 인코딩하여 프록시 서버의 매개변수로 안전하게 전달합니다.
+    const targetUrl = PROXY_URL + encodeURIComponent(url);
     
     try {
-        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다. (CORS 우회를 위해 프록시 서버를 사용합니다)...</p>';
+        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다. (새 프록시 서버를 사용합니다)...</p>';
         stopReading(); 
 
         const response = await fetch(targetUrl);
         if (!response.ok) {
+            // 참고: allorigins 프록시는 404가 나더라도 200 응답을 줄 때가 많으므로,
+            // 이 로직보다는 아래의 텍스트 추출 로직에서 오류가 발생할 가능성이 더 높습니다.
             throw new Error(`HTTP 오류: ${response.status}`);
         }
         
@@ -183,8 +186,9 @@ async function fetchAndProcessUrlContent(url) {
             text = novelContentElement.textContent || '';
             text = text.trim();
         } else {
-            throw new Error("페이지에서 ID 'novel_content' 요소를 찾을 수 없습니다.");
+            throw new Error("페이지에서 ID 'novel_content' 요소를 찾을 수 없습니다. (프록시 실패 또는 대상 웹페이지 구조 변경)");
         }
+// ... (이하 동일)
 
         if (text.length < 50) { // 너무 짧은 텍스트는 오류로 간주
              throw new Error("추출된 텍스트 내용이 너무 짧습니다. (요소 ID 또는 페이지 내용 확인 필요)");
