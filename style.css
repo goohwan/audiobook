@@ -1,0 +1,72 @@
+/* 기본 리셋 및 폰트 설정 */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f8f8f8;
+}
+
+/* 1. 좌우 분할 레이아웃 (PC 버전) */
+.app-container {
+    display: flex;
+    height: calc(100vh - 50px); /* 헤더 높이 제외 */
+}
+
+.file-panel {
+    flex: 0 0 300px; /* 파일 목록 패널 고정 너비 */
+    padding: 20px;
+    border-right: 1px solid #ddd;
+    overflow-y: auto;
+    background-color: #fff;
+}
+
+.reader-panel {
+    flex-grow: 1; /* 남은 공간 모두 사용 */
+    padding: 20px;
+    display: flex;
+    flex-direction: column; /* 내부 요소 수직 배열 */
+}
+
+/* 2. 텍스트 뷰어 스타일 */
+.text-viewer {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid #eee;
+    background-color: #fefefe;
+    line-height: 1.8;
+}
+
+/* 3. 모바일 반응형 (화면 너비 768px 이하) */
+@media (max-width: 768px) {
+    .app-container {
+        flex-direction: column; /* 세로로 쌓기 */
+        height: auto;
+    }
+
+    .file-panel {
+        flex: none; /* 너비 고정 해제 */
+        order: 2; /* 파일 목록을 아래로 이동 */
+        border-right: none;
+        border-top: 1px solid #ddd;
+    }
+
+    .reader-panel {
+        order: 1; /* 읽기 패널을 위로 이동 */
+        height: 60vh; /* 모바일에서 일정 높이 확보 */
+    }
+}
+
+/* 4. 드래그 & 드롭 영역 스타일 */
+.drop-area {
+    border: 2px dashed #ccc;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+}
+
+/* 5. 하이라이트 스타일 (JS로 적용될 클래스) */
+.highlight {
+    background-color: yellow;
+    transition: background-color 0.3s;
+}

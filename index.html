@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>책 읽어주는 가을이</title>
+    <link rel="stylesheet" href="style.css"> </head>
+<body>
+
+    <header>
+        <h1>🍁 책 읽어주는 가을이</h1>
+        </header>
+
+    <main class="app-container">
+
+        <section class="file-panel">
+            <h2>📚 파일 목록 (TXT 전용)</h2>
+
+            <div id="drop-area" class="drop-area">
+                <p>여기에 TXT 파일을 드래그 & 드롭하거나</p>
+                <input type="file" id="file-input" accept=".txt" multiple style="display: none;">
+                <button id="file-upload-btn">파일 첨부하기 (최대 20개)</button>
+            </div>
+
+            <ul id="file-list" class="file-list">
+                </ul>
+        </section>
+
+        <section class="reader-panel">
+            
+            <div class="controls-settings">
+                <label for="voice-select">목소리:</label>
+                <select id="voice-select"></select> <label for="rate-slider">속도:</label>
+                <input type="range" id="rate-slider" min="0.5" max="2.0" value="1.0" step="0.1">
+                <span id="rate-display">1.0</span>
+            </div>
+            
+            <div id="text-viewer" class="text-viewer">
+                <p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>
+            </div>
+
+            <div class="controls-playback">
+                <button id="prev-file-btn" title="이전 파일">⏮️</button>
+                <button id="play-pause-btn" title="재생/일시정지">▶️</button>
+                <button id="stop-btn" title="정지">⏹️</button>
+                <button id="next-file-btn" title="다음 파일">⏭️</button>
+            </div>
+            
+        </section>
+        
+    </main>
+
+    <script src="script.js"></script> </body>
+</html>
