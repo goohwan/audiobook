@@ -1,11 +1,11 @@
 // --- 전역 변수 설정 ---
 const MAX_FILES = 20;
 const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수 (Web Speech API 안정성 고려)
-const PRELOAD_CHUNK_COUNT = 10; // 초기 재생을 위해 미리 분할할 텍스트 청크 수
 
 let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
+let isSequential = true; // 정주행 기능 상태 (기본값: true)
 
 // Web Speech API 객체
 const synth = window.speechSynthesis;
@@ -24,13 +24,13 @@ const $rateSlider = $('#rate-slider');
 const $rateDisplay = $('#rate-display');
 const $playPauseBtn = $('#play-pause-btn');
 
-// --- 클립보드 관련 DOM 요소
+// --- 추가된 DOM 요소 ---
 const $clipboardTextInput = $('#clipboard-text-input');
 const $loadClipboardBtn = $('#load-clipboard-btn');
-
-// --- URL 관련 DOM 요소 추가
 const $urlTextInput = $('#url-text-input');
 const $loadUrlBtn = $('#load-url-btn');
+const $sequentialReadCheckbox = $('#sequential-read-checkbox'); // 정주행 체크박스
+const $clearAllFilesBtn = $('#clear-all-files-btn'); // 전체 삭제 버튼
 // ----------------------------------------
 
 // --- 초기화 및 이벤트 리스너 ---
@@ -71,11 +71,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // 6. 클립보드 입력 이벤트 설정
     $loadClipboardBtn.addEventListener('click', handleClipboardText);
 
-    // 7. URL 입력 이벤트 설정 (새로운 부분)
+    // 7. URL 입력 이벤트 설정
     $loadUrlBtn.addEventListener('click', handleUrlText);
+
+    // 8. 정주행 체크박스 이벤트 설정
+    $sequentialReadCheckbox.addEventListener('change', (e) => {
+        isSequential = e.target.checked;
+        saveBookmark(); 
+    });
+    // 북마크에서 정주행 상태 복원
+    if(localStorage.getItem('autumnReaderBookmark')) {
+        const bookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
+        isSequential = bookmark.isSequential !== undefined ? bookmark.isSequential : true;
+    }
+    $sequentialReadCheckbox.checked = isSequential;
+
+    // 9. 전체 삭제 버튼 이벤트 설정
+    $clearAllFilesBtn.addEventListener('click', clearAllFiles);
+    
+    // 10. 파일 목록 클릭 이벤트 위임 (개별 재생, 삭제)
+    $fileList.addEventListener('click', handleFileListItemClick);
+    
+    // 11. 드래그 앤 드롭을 위한 sortablejs 설정
+    setupFileListSortable();
 });
 
-// 브라우저 종료 전 북마크 저장 (조건 8)
+// 브라우저 종료 전 북마크 저장
 window.addEventListener('beforeunload', () => {
     saveBookmark();
     if (synth.speaking) {
@@ -83,11 +104,8 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-// --- 목소리 및 설정 기능 ---
+// --- 목소리 및 설정 기능 (이전과 동일) ---
 
-/**
- * 사용 가능한 목소리 목록을 가져와 드롭다운에 채우고 Google TTS를 기본으로 선택합니다.
- */
 function populateVoiceList() {
     const voices = synth.getVoices();
     $voiceSelect.innerHTML = ''; 
@@ -97,31 +115,26 @@ function populateVoiceList() {
     let preferredVoiceName = null;
     let selectedVoice = null;
 
-    // 1. 목소리 분류 및 Google TTS 찾기
     voices.forEach((voice) => {
         const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
         
         if (voice.lang.includes('ko')) {
             koreanVoices.push(option);
             
-            // Google 목소리 패턴 찾기
             if (voice.name.includes('Google') || voice.name.includes('Standard') || voice.name.includes('Wavenet')) {
                  googleKoreanVoiceName = voice.name;
             }
         }
     });
 
-    // 2. 한국어 목소리만 드롭다운에 추가
     koreanVoices.forEach(option => $voiceSelect.appendChild(option));
 
-    // 3. 기본 목소리 설정 (Google TTS 우선)
     if (googleKoreanVoiceName) {
         preferredVoiceName = googleKoreanVoiceName;
     } else if (koreanVoices.length > 0) {
         preferredVoiceName = koreanVoices[0].value;
     }
 
-    // 4. 북마크 데이터 또는 선호하는 목소리 설정
     const savedBookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
 
     if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
@@ -141,9 +154,6 @@ function populateVoiceList() {
     updateRateDisplay();
 }
 
-/**
- * 속도 슬라이더 값에 따라 표시를 업데이트합니다.
- */
 function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
@@ -151,19 +161,19 @@ function updateRateDisplay() {
 // --- 파일 처리 및 분할 기능 ---
 
 /**
- * URL에서 텍스트를 가져와 뷰어에 로드하고 처리합니다. (새로 추가된 비동기 함수)
+ * URL에서 텍스트를 가져와 뷰어에 로드하고 처리합니다. (새로운 프록시 적용)
  */
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     
-    // 💡 새로운 공용 프록시 서버 (api.allorigins.win)를 사용하여 CORS 문제를 우회합니다.
+    // 새로운 공용 프록시 서버 (api.allorigins.win)를 사용하여 CORS 문제를 우회합니다.
     const PROXY_URL = 'https://api.allorigins.win/raw?url='; 
 
     // 대상 URL을 URL 인코딩하여 프록시 서버의 매개변수로 안전하게 전달합니다.
     const targetUrl = PROXY_URL + encodeURIComponent(url);
     
     try {
-        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다. (새 프록시 서버를 사용합니다)...</p>';
+        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다. (프록시 서버 사용)...</p>';
         stopReading(); 
 
         const response = await fetch(targetUrl);
@@ -173,25 +183,23 @@ async function fetchAndProcessUrlContent(url) {
         
         const htmlText = await response.text();
 
-        // 텍스트에서 ID 'novel_content'의 innerText를 추출 (DOMParser 사용)
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
+        // ID 'novel_content' 요소에서 텍스트를 추출합니다.
         const novelContentElement = doc.getElementById('novel_content');
 
         let text = '';
         if (novelContentElement) {
-            // textContent를 사용하여 요소 내의 모든 텍스트를 가져옵니다.
             text = novelContentElement.textContent || '';
             text = text.trim();
         } else {
             throw new Error("페이지에서 ID 'novel_content' 요소를 찾을 수 없습니다.");
         }
 
-        if (text.length < 50) { // 너무 짧은 텍스트는 오류로 간주
+        if (text.length < 50) { 
              throw new Error("추출된 텍스트 내용이 너무 짧습니다. (요소 ID 또는 페이지 내용 확인 필요)");
         }
 
-        // 파일 데이터 구조로 변환
         const fileId = Date.now();
         const fileName = `[URL] ${url.substring(0, 30)}...`;
 
@@ -203,31 +211,26 @@ async function fetchAndProcessUrlContent(url) {
             isProcessed: false 
         };
 
+        // 자동 재생 방지: filesData에 추가만 하고 currentFileIndex를 변경하지 않습니다.
         filesData.unshift(newFileData);
         
         if (filesData.length > MAX_FILES) {
             filesData.pop(); 
         }
 
-        currentFileIndex = 0;
-        currentChunkIndex = 0;
-        
         renderFileList();
-        processFileChunks(currentFileIndex, true);
+        // URL을 로드한 파일은 바로 청크를 처리합니다. (재생 시작 안 함)
+        processFileChunks(0, false); 
 
         $urlTextInput.value = '';
 
     } catch (error) {
-        // 프록시 서버가 변경되었으므로, 해당 서버에 맞게 오류 메시지를 변경합니다.
         alert(`URL 로드 실패: ${error.message}. 프록시 서버 문제일 수 있습니다. 다른 URL로 시도하거나 잠시 후 다시 시도해 보세요.`);
         $textViewer.innerHTML = `<p style="color:red;">오류 발생: ${error.message}</p>`;
         renderFileList();
     }
 }
 
-/**
- * URL 로드 버튼 클릭 핸들러 (새로 추가된 함수)
- */
 function handleUrlText() {
     const url = $urlTextInput.value.trim();
     if (url) {
@@ -237,9 +240,6 @@ function handleUrlText() {
     }
 }
 
-/**
- * 클립보드 입력 텍스트를 처리하여 뷰어에 로드합니다.
- */
 function handleClipboardText() {
     const text = $clipboardTextInput.value.trim();
     if (!text) {
@@ -247,7 +247,6 @@ function handleClipboardText() {
         return;
     }
 
-    // 파일 업로드와 동일한 데이터 구조로 변환
     const fileId = Date.now();
     const fileName = `[클립보드] ${new Date().toLocaleTimeString()}`;
 
@@ -265,19 +264,14 @@ function handleClipboardText() {
         filesData.pop(); 
     }
 
-    currentFileIndex = 0;
-    currentChunkIndex = 0;
-    
     renderFileList();
-    processFileChunks(currentFileIndex, true);
+    // 클립보드 텍스트도 바로 청크를 처리합니다. (재생 시작 안 함)
+    processFileChunks(0, false); 
 
     $clipboardTextInput.value = '';
 }
 
 
-/**
- * 파일 입력 이벤트 핸들러. (북마크 복원 로직 개선)
- */
 function handleFiles(event) {
     const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
 
@@ -307,29 +301,26 @@ function handleFiles(event) {
 
             let shouldResume = false;
             
-            // 2. 북마크 체크 및 대화형 프롬프트
+            // 북마크 복원 로직은 유지
             if (bookmarkData) {
                 const bookmark = JSON.parse(bookmarkData);
                 if (file.name === bookmark.fileName) { 
-                    const resume = confirm(`[북마크 복원] "${file.name}"의 저장된 위치(${bookmark.chunkIndex + 1}번째 청크)부터 이어서 읽으시겠습니까? \n\n'확인'을 누르면 이어서 읽고, '취소'를 누르면 처음부터 읽습니다.`);
+                    const resume = confirm(`[북마크 복원] "${file.name}"의 저장된 위치(${bookmark.chunkIndex + 1}번째 청크)부터 이어서 읽으시겠습니까?`);
 
                     if (resume) {
                         currentFileIndex = newFileIndex;
                         currentChunkIndex = bookmark.chunkIndex;
                         shouldResume = true;
+                        // 북마크 복원 시에만 재생 시작 (startReading=true)
                         processFileChunks(newFileIndex, true); 
                     }
                 }
             }
             
-            // 3. 기본 로직 
+            // 파일 첨부 시 자동 재생 방지: currentFileIndex를 변경하지 않고 청크만 처리
             if (!shouldResume) {
-                if (currentFileIndex === -1) {
-                    currentFileIndex = newFileIndex;
-                    processFileChunks(currentFileIndex, true);
-                } else {
-                    setTimeout(() => processFileChunks(newFileIndex, false), 100);
-                }
+                // 비동기로 청크만 처리
+                setTimeout(() => processFileChunks(newFileIndex, false), 100);
             }
         };
         reader.readAsText(file, 'UTF-8');
@@ -337,9 +328,6 @@ function handleFiles(event) {
     event.target.value = '';
 }
 
-/**
- * 드래그 앤 드롭 설정.
- */
 function setupDragAndDrop() {
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         $dropArea.addEventListener(eventName, preventDefaults, false);
@@ -368,9 +356,6 @@ function setupDragAndDrop() {
 }
 
 
-/**
- * 텍스트를 문장 단위로 분할하여 chunks 배열에 저장합니다. (조건 4, 5)
- */
 function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || file.isProcessed) return;
@@ -397,23 +382,21 @@ function processFileChunks(fileIndex, startReading) {
         file.isProcessed = true;
     }
 
-    if (startReading) {
+    if (startReading && currentFileIndex === fileIndex) {
         renderTextViewer(fileIndex); 
-        if (currentFileIndex === fileIndex) {
-            startReadingFromCurrentChunk(); 
-        }
-    } else if (!startReading && fileIndex < filesData.length - 1) {
+        startReadingFromCurrentChunk(); 
+    } 
+    
+    // 다음 파일 청크 처리 (정주행이 아닌 경우에도 미리 처리)
+    if (fileIndex < filesData.length - 1) {
         setTimeout(() => processFileChunks(fileIndex + 1, false), 100);
     }
 }
 
 // --- 재생 컨트롤 기능 ---
 
-/**
- * 현재 청크부터 읽기를 시작하거나 이어서 읽습니다.
- */
 function startReadingFromCurrentChunk() {
-    if (currentFileIndex === -1 || isSpeaking) return;
+    if (currentFileIndex === -1) return;
 
     const file = filesData[currentFileIndex];
     if (!file || !file.isProcessed) {
@@ -434,16 +417,19 @@ function startReadingFromCurrentChunk() {
     speakNextChunk();
 }
 
-/**
- * 다음 텍스트 청크를 발화합니다. (조건 4, 7)
- */
 function speakNextChunk() {
     const file = filesData[currentFileIndex];
     
     if (!isSpeaking || isPaused) return; 
     
     if (currentChunkIndex >= file.chunks.length) {
-        changeFile(currentFileIndex + 1);
+        // 정주행 기능 로직 추가
+        if (isSequential) {
+            changeFile(currentFileIndex + 1);
+        } else {
+            // 정주행이 아니면 재생 목록 끝에서 멈춥니다.
+            stopReading();
+        }
         return;
     }
 
@@ -471,11 +457,11 @@ function speakNextChunk() {
     synth.speak(currentUtterance);
 }
 
-/**
- * 재생/일시정지 토글. (조건 7)
- */
 function togglePlayPause() {
-    if (currentFileIndex === -1) return;
+    if (currentFileIndex === -1) {
+        alert("재생할 파일을 먼저 선택해주세요.");
+        return;
+    }
 
     if (isSpeaking && !isPaused) {
         synth.pause();
@@ -486,13 +472,11 @@ function togglePlayPause() {
         isPaused = false;
         $playPauseBtn.textContent = '⏸️';
     } else {
+        // 재생 버튼을 누르면 현재 파일에서 재생을 시작
         startReadingFromCurrentChunk();
     }
 }
 
-/**
- * 재생 정지 및 상태 초기화.
- */
 function stopReading() {
     synth.cancel();
     isSpeaking = false;
@@ -500,19 +484,17 @@ function stopReading() {
     currentChunkIndex = 0; 
     $playPauseBtn.textContent = '▶️';
     
-    // 하이라이팅 초기화
     if(currentFileIndex !== -1) {
         renderTextViewer(currentFileIndex); 
     }
 }
 
-/**
- * 다음 또는 이전 파일로 이동 (정주행)
- */
 function changeFile(newIndex) {
     if (newIndex < 0 || newIndex >= filesData.length) {
         alert("더 이상 읽을 파일이 없습니다.");
         stopReading();
+        currentFileIndex = -1; 
+        renderTextViewer(-1);
         return;
     }
     
@@ -522,30 +504,155 @@ function changeFile(newIndex) {
     
     if (!filesData[newIndex].isProcessed) {
         processFileChunks(newIndex, true);
-    }
-    
-    renderTextViewer(newIndex); 
-    
-    if (isSpeaking) {
-        startReadingFromCurrentChunk();
+    } else {
+        renderTextViewer(newIndex); 
+        if (isSpeaking) {
+            startReadingFromCurrentChunk();
+        }
     }
 }
 
-// --- UI 및 북마크 기능 ---
+// --- 파일 목록 관리 기능 ---
 
 /**
- * 텍스트 뷰어에 해당 파일의 내용을 표시하고 클릭 이벤트를 설정합니다. (조건 6, 재생 위치 이동)
- * @param {number} fileIndex - 파일 인덱스
+ * 파일 목록 아이템 클릭 핸들러 (개별 재생, 삭제 위임)
  */
-function renderTextViewer(fileIndex) {
-    if (fileIndex === -1 || !filesData[fileIndex] || !filesData[fileIndex].isProcessed) {
-        const text = fileIndex !== -1 ? filesData[fileIndex].fullText : '';
-        $textViewer.innerHTML = text.replace(/\n/g, '<br>') || '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
-        renderFileList();
+function handleFileListItemClick(e) {
+    const li = e.target.closest('li');
+    if (!li) return;
+    
+    const fileId = parseInt(li.dataset.fileId);
+    const fileIndex = filesData.findIndex(f => f.id === fileId);
+    if (fileIndex === -1) return;
+
+    // 1. 삭제 버튼 클릭 시
+    if (e.target.classList.contains('delete-file-btn')) {
+        deleteFile(fileIndex);
         return;
     }
     
+    // 2. 순서 변경 버튼 클릭 시 (Sortable.js가 처리하므로 무시)
+    if (e.target.classList.contains('drag-handle')) {
+        return;
+    }
+
+    // 3. 파일 이름 영역 클릭 시 (재생 시작/파일 선택)
+    if (fileIndex !== currentFileIndex) {
+        // 현재 파일 변경 및 뷰어 로드 (재생은 시작하지 않음)
+        currentFileIndex = fileIndex;
+        currentChunkIndex = 0; 
+        renderTextViewer(currentFileIndex);
+    } else if (currentFileIndex === fileIndex && !isSpeaking) {
+        // 현재 파일을 클릭했는데 재생 중이 아니라면, 재생 시작
+        startReadingFromCurrentChunk();
+    }
+    
+    // 파일 목록이 변경된 경우 뷰어 로드만 진행
+    renderTextViewer(currentFileIndex);
+}
+
+/**
+ * 개별 파일 삭제
+ */
+function deleteFile(index) {
+    if (index === -1) return;
+
+    const wasCurrentFile = index === currentFileIndex;
+
+    filesData.splice(index, 1);
+    
+    if (wasCurrentFile) {
+        stopReading();
+        currentFileIndex = filesData.length > 0 ? 0 : -1;
+        currentChunkIndex = 0;
+        renderTextViewer(currentFileIndex);
+    } else if (index < currentFileIndex) {
+        currentFileIndex--; 
+    }
+    
+    renderFileList();
+    saveBookmark(); 
+
+    if (filesData.length === 0) {
+        $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
+        currentFileIndex = -1;
+    }
+}
+
+/**
+ * 전체 파일 삭제
+ */
+function clearAllFiles() {
+    if (filesData.length === 0) return;
+    if (!confirm("첨부된 파일 전체를 삭제하시겠습니까?")) return;
+
+    stopReading();
+    filesData = [];
+    currentFileIndex = -1;
+    currentChunkIndex = 0;
+    
+    localStorage.removeItem('autumnReaderBookmark');
+    
+    renderFileList();
+    $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
+}
+
+
+/**
+ * SortableJS를 사용하여 파일 목록 순서 변경 기능을 활성화합니다.
+ */
+function setupFileListSortable() {
+    // SortableJS가 index.html에서 로드되었는지 확인
+    if (typeof Sortable === 'undefined') {
+        console.warn("SortableJS 라이브러리를 찾을 수 없습니다. 파일 순서 변경 기능이 작동하지 않습니다.");
+        return; 
+    }
+
+    new Sortable($fileList, {
+        handle: '.drag-handle', // 햄버거 버튼(.drag-handle)을 핸들로 지정
+        animation: 150,
+        onEnd: function (evt) {
+            const oldIndex = evt.oldIndex;
+            const newIndex = evt.newIndex;
+            
+            // filesData 배열에서 요소 순서 변경
+            const [movedItem] = filesData.splice(oldIndex, 1);
+            filesData.splice(newIndex, 0, movedItem);
+
+            // currentFileIndex 조정
+            if (currentFileIndex === oldIndex) {
+                currentFileIndex = newIndex;
+            } else if (oldIndex < currentFileIndex && newIndex >= currentFileIndex) {
+                currentFileIndex--;
+            } else if (oldIndex > currentFileIndex && newIndex <= currentFileIndex) {
+                currentFileIndex++;
+            }
+            
+            renderFileList();
+            saveBookmark();
+        },
+    });
+}
+
+
+// --- UI 및 북마크 기능 ---
+
+function renderTextViewer(fileIndex) {
+    if (fileIndex === -1 || !filesData[fileIndex]) {
+        $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
+        renderFileList();
+        return;
+    }
+
     const file = filesData[fileIndex];
+
+    if (!file.isProcessed) {
+        // 청크 처리 전에는 전체 텍스트를 보여줍니다.
+        $textViewer.innerHTML = `<p style="color:#FFD700;">[파일 로딩 중/청크 처리 중] : ${file.name}</p>` + file.fullText.replace(/\n/g, '<br>');
+        renderFileList();
+        return;
+    }
+
     const allChunks = file.chunks;
     let htmlContent = '';
     
@@ -560,15 +667,11 @@ function renderTextViewer(fileIndex) {
     $textViewer.innerHTML = htmlContent;
     renderFileList();
 
-    // 스크롤 이동
     if (isSpeaking || isPaused) {
          setTimeout(scrollToCurrentChunk, 100);
     }
 }
 
-/**
- * 현재 하이라이트된 청크로 스크롤을 이동합니다.
- */
 function scrollToCurrentChunk() {
     const highlighted = $('.highlight');
     if (highlighted) {
@@ -577,15 +680,11 @@ function scrollToCurrentChunk() {
 }
 
 
-/**
- * 텍스트 뷰어에 클릭 이벤트를 설정하여 재생 위치를 이동합니다. (현재 하이라이트된 청크 클릭 방지 로직 추가)
- */
 function setupTextViewerClickEvent() {
     $textViewer.addEventListener('click', (e) => {
         const chunkElement = e.target.closest('.text-chunk');
         if (!chunkElement) return;
         
-        // 현재 하이라이트된 청크(.highlight)라면 클릭 이벤트를 무시
         if (chunkElement.classList.contains('highlight')) {
             return; 
         }
@@ -597,52 +696,63 @@ function setupTextViewerClickEvent() {
     });
 }
 
-/**
- * 지정된 청크 인덱스로 재생 위치를 이동하고 재생을 시작합니다.
- * @param {number} index - 이동할 청크의 인덱스
- */
 function jumpToChunk(index) {
     if (currentFileIndex === -1 || index >= filesData[currentFileIndex].chunks.length) return;
 
-    // 현재 발화 중인 TTS 중지
     synth.cancel();
 
-    // 상태 업데이트
     currentChunkIndex = index;
     isSpeaking = true;
     isPaused = false;
     $playPauseBtn.textContent = '⏸️';
 
-    // UI 업데이트 및 재생 시작
     renderTextViewer(currentFileIndex);
     speakNextChunk();
 }
 
 
 /**
- * 파일 목록 UI를 업데이트합니다.
+ * 파일 목록 UI를 업데이트합니다. (삭제/순서 변경 버튼 추가)
  */
 function renderFileList() {
     $fileList.innerHTML = '';
     filesData.forEach((file, index) => {
         const li = document.createElement('li');
-        li.textContent = file.name;
         li.dataset.fileId = file.id;
-        li.classList.toggle('active', index === currentFileIndex);
+
+        // 1. 파일 이름 표시 영역
+        const fileNameSpan = document.createElement('span');
+        fileNameSpan.textContent = file.name;
+        fileNameSpan.classList.add('file-item-name');
         
-        li.addEventListener('click', () => {
-            if (index !== currentFileIndex) {
-                changeFile(index);
-            }
-        });
+        // 2. 컨트롤 버튼 영역
+        const controlsDiv = document.createElement('div');
+        controlsDiv.classList.add('file-controls');
+
+        // 2-1. 순서 변경 버튼 (햄버거 버튼)
+        const dragHandle = document.createElement('button');
+        dragHandle.innerHTML = '☰'; // 햄버거 아이콘
+        dragHandle.classList.add('drag-handle');
+        dragHandle.title = '순서 변경';
+
+        // 2-2. 개별 삭제 버튼 (X)
+        const deleteBtn = document.createElement('button');
+        deleteBtn.innerHTML = 'X';
+        deleteBtn.classList.add('delete-file-btn');
+        deleteBtn.title = '파일 삭제';
+        
+        controlsDiv.appendChild(dragHandle);
+        controlsDiv.appendChild(deleteBtn);
+        
+        li.appendChild(fileNameSpan);
+        li.appendChild(controlsDiv);
+        
+        li.classList.toggle('active', index === currentFileIndex);
         
         $fileList.appendChild(li);
     });
 }
 
-/**
- * 현재 상태를 localStorage에 저장합니다. (조건 8)
- */
 function saveBookmark() {
     if (currentFileIndex === -1) return;
     
@@ -650,6 +760,7 @@ function saveBookmark() {
         fileId: filesData[currentFileIndex].id,
         fileName: filesData[currentFileIndex].name, 
         chunkIndex: currentChunkIndex,
+        isSequential: isSequential, // 정주행 상태 저장
         settings: { 
             voice: $voiceSelect.value, 
             rate: $rateSlider.value 
@@ -658,17 +769,21 @@ function saveBookmark() {
     localStorage.setItem('autumnReaderBookmark', JSON.stringify(bookmarkData));
 }
 
-/**
- * localStorage에서 북마크 설정만 로드합니다. (파일 위치 복원은 handleFiles에서 처리)
- */
 function loadBookmark() {
     const data = localStorage.getItem('autumnReaderBookmark');
     if (!data) return;
 
     const bookmark = JSON.parse(data);
     
+    // 설정 복구
     if (bookmark.settings) {
          $rateSlider.value = bookmark.settings.rate;
          updateRateDisplay();
+    }
+    
+    // 정주행 상태 복구
+    isSequential = bookmark.isSequential !== undefined ? bookmark.isSequential : true;
+    if ($sequentialReadCheckbox) {
+        $sequentialReadCheckbox.checked = isSequential;
     }
 }
