@@ -1,20 +1,18 @@
 // --- 전역 변수 설정 ---
 const MAX_FILES = 50; // 파일 첨부 최대 개수 50개
 const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수 (Web Speech API 안정성 고려)
-const PRELOAD_NEXT_FILES = 2; // 미리 처리할 다음 파일 수 (스트리밍-like)
+const PRELOAD_NEXT_CHUNKS = 2; // 미리 큐잉할 다음 청크 수
 
 let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
 let isSequential = true; // 정주행 기능 상태 (기본값: true)
-let preloadedFiles = new Set(); // 미리 처리된 파일 인덱스 추적
 
 // Web Speech API 객체
 const synth = window.speechSynthesis;
 let currentUtterance = null; // 현재 발화 중인 SpeechSynthesisUtterance 객체
 let isPaused = false;
 let isSpeaking = false;
-let wakeLock = null; // Wake Lock 객체: 절전/화면 잠금 방지용
 
 // DOM 요소 캐시
 const $ = (selector) => document.querySelector(selector);
@@ -84,7 +82,24 @@ document.addEventListener('DOMContentLoaded', () => {
     $fileList.addEventListener('click', handleFileListItemClick);
     
     setupFileListSortable();
+
+    // 모바일 백그라운드 재생을 위한 visibilitychange 이벤트
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 });
+
+function handleVisibilityChange() {
+    if (document.visibilityState === 'hidden') {
+        if (isSpeaking && !isPaused) {
+            synth.pause();
+            isPaused = true;
+        }
+    } else if (document.visibilityState === 'visible') {
+        if (isSpeaking && isPaused) {
+            synth.resume();
+            isPaused = false;
+        }
+    }
+}
 
 window.addEventListener('beforeunload', () => {
     saveBookmark();
@@ -147,35 +162,6 @@ function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
 
-// --- Wake Lock API ---
-
-async function requestWakeLock() {
-    if ('wakeLock' in navigator) {
-        try {
-            wakeLock = await navigator.wakeLock.request('screen');
-            wakeLock.addEventListener('release', () => {
-                console.log('Wake Lock released by system or manually.');
-            });
-            console.log('Wake Lock requested. Screen lock prevented.');
-        } catch (err) {
-            console.warn(`Wake Lock request failed: ${err.name}, ${err.message}`);
-        }
-    }
-}
-
-function releaseWakeLock() {
-    if (wakeLock) {
-        wakeLock.release()
-            .then(() => {
-                wakeLock = null;
-                console.log('Wake Lock released successfully.');
-            })
-            .catch((err) => {
-                console.error(`Wake Lock release failed: ${err.name}, ${err.message}`);
-            });
-    }
-}
-
 // --- 파일 처리 및 분할 기능 ---
 
 function readTextFile(file, encoding) {
@@ -231,7 +217,6 @@ async function fetchAndProcessUrlContent(url) {
         // URL 로드 후 즉시 첫 파일 청크 처리 및 재생 시작
         currentFileIndex = 0; 
         processFileChunks(0, true); 
-        preloadNextFiles(1); // 다음 파일 미리 처리 시작
 
         $urlTextInput.value = '';
     } catch (error) {
@@ -276,13 +261,12 @@ function handleClipboardText() {
     // 클립보드 로드 후 즉시 첫 파일 청크 처리 및 재생 시작
     currentFileIndex = 0;
     processFileChunks(0, true); 
-    preloadNextFiles(1); // 다음 파일 미리 처리 시작
 
     $clipboardTextInput.value = '';
 }
 
 /**
- * 파일 입력 핸들러: 첫 파일만 즉시 처리, 나머지는 재생 중 preload
+ * 파일 입력 핸들러: 첫 파일만 즉시 처리
  */
 function handleFiles(event) {
     const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
@@ -363,13 +347,11 @@ function handleFiles(event) {
                 currentChunkIndex = chunkIndexForResume;
                 
                 processFileChunks(currentFileIndex, true); 
-                preloadNextFiles(currentFileIndex + 1); // 다음 파일 미리 처리
             }
         } else if (currentFileIndex === -1) {
             currentFileIndex = startIndex; 
             
             processFileChunks(currentFileIndex, false); 
-            preloadNextFiles(startIndex + 1); // 다음 파일 미리 처리
         }
         
         renderFileList();
@@ -407,7 +389,6 @@ function processFileChunks(fileIndex, startReading) {
     
     if (file.chunks.length > 0) {
         file.isProcessed = true;
-        preloadedFiles.add(fileIndex);
         console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
     }
 
@@ -417,22 +398,6 @@ function processFileChunks(fileIndex, startReading) {
     } 
     
     renderFileList(); // 파일 목록에서 처리 완료 상태 업데이트
-}
-
-/**
- * 재생 중 다음 파일(최대 PRELOAD_NEXT_FILES 개) 미리 청크 처리 (스트리밍-like)
- * @param {number} startIndex 미리 처리 시작 인덱스
- */
-function preloadNextFiles(startIndex) {
-    for (let i = 0; i < PRELOAD_NEXT_FILES; i++) {
-        const index = startIndex + i;
-        if (index >= filesData.length || preloadedFiles.has(index) || filesData[index].isProcessed) continue;
-
-        setTimeout(() => {
-            console.log(`[미리 처리] 파일 "${filesData[index].name}" 시작...`);
-            processFileChunks(index, false);
-        }, 500 * i); // 지연으로 리소스 분산
-    }
 }
 
 function setupDragAndDrop() {
@@ -484,8 +449,6 @@ function startReadingFromCurrentChunk() {
 
     synth.cancel();
     
-    requestWakeLock();
-    
     speakNextChunk();
 }
 
@@ -515,8 +478,6 @@ function speakNextChunk() {
     currentUtterance.onend = () => {
         currentChunkIndex++;
         saveBookmark(); 
-        // 청크 끝날 때 다음 파일 미리 처리 트리거
-        preloadNextFiles(currentFileIndex + 1);
         setTimeout(speakNextChunk, 50); 
     };
     
@@ -525,6 +486,23 @@ function speakNextChunk() {
     };
 
     synth.speak(currentUtterance);
+
+    // 다음 2개 청크 미리 큐잉
+    for (let i = 1; i <= PRELOAD_NEXT_CHUNKS; i++) {
+        const nextIndex = currentChunkIndex + i;
+        if (nextIndex < file.chunks.length) {
+            const nextUtterance = new SpeechSynthesisUtterance(file.chunks[nextIndex]);
+            nextUtterance.voice = currentUtterance.voice;
+            nextUtterance.rate = currentUtterance.rate;
+            nextUtterance.pitch = currentUtterance.pitch;
+            nextUtterance.onend = () => {
+                currentChunkIndex = nextIndex + 1;
+                saveBookmark(); 
+                setTimeout(speakNextChunk, 50); 
+            };
+            synth.speak(nextUtterance);
+        }
+    }
 }
 
 function togglePlayPause() {
@@ -537,12 +515,10 @@ function togglePlayPause() {
         synth.pause();
         isPaused = true;
         $playPauseBtn.textContent = '▶️';
-        releaseWakeLock();
     } else if (isSpeaking && isPaused) {
         synth.resume();
         isPaused = false;
         $playPauseBtn.textContent = '⏸️';
-        requestWakeLock();
     } else {
         startReadingFromCurrentChunk();
     }
@@ -554,8 +530,6 @@ function stopReading() {
     isPaused = false;
     currentChunkIndex = 0; 
     $playPauseBtn.textContent = '▶️';
-    
-    releaseWakeLock();
     
     if(currentFileIndex !== -1) {
         renderTextViewer(currentFileIndex); 
@@ -577,7 +551,6 @@ function changeFile(newIndex) {
     
     if (!filesData[newIndex].isProcessed) {
         processFileChunks(newIndex, true); 
-        preloadNextFiles(newIndex + 1);
     } else {
         renderTextViewer(newIndex); 
         if (isSpeaking) {
@@ -616,7 +589,6 @@ function handleFileListItemClick(e) {
 
     if (!filesData[currentFileIndex].isProcessed) {
         processFileChunks(currentFileIndex, true); 
-        preloadNextFiles(currentFileIndex + 1);
     } else {
         startReadingFromCurrentChunk(); 
     }
@@ -631,7 +603,6 @@ function deleteFile(index) {
     const wasCurrentFile = index === currentFileIndex;
 
     filesData.splice(index, 1);
-    preloadedFiles.delete(index); // preload 추적 삭제
     
     if (wasCurrentFile) {
         stopReading();
@@ -659,13 +630,13 @@ function clearAllFiles() {
     filesData = [];
     currentFileIndex = -1;
     currentChunkIndex = 0;
-    preloadedFiles.clear();
     
     localStorage.removeItem('autumnReaderBookmark');
     
     renderFileList();
     $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
 }
+
 
 function setupFileListSortable() {
     if (typeof Sortable === 'undefined') {
@@ -690,19 +661,12 @@ function setupFileListSortable() {
                 currentFileIndex++;
             }
             
-            // preload 상태 업데이트
-            preloadedFiles = new Set([...preloadedFiles].map(idx => {
-                if (idx === oldIndex) return newIndex;
-                if (idx > oldIndex && idx <= newIndex) return idx - 1;
-                if (idx < oldIndex && idx >= newIndex) return idx + 1;
-                return idx;
-            }));
-            
             renderFileList();
             saveBookmark();
         },
     });
 }
+
 
 // --- UI 및 북마크 기능 ---
 
@@ -716,7 +680,7 @@ function renderTextViewer(fileIndex) {
     const file = filesData[fileIndex];
 
     if (!file.isProcessed) {
-        $textViewer.innerHTML = `<p style="color:#FFD700;">[파일 로딩 중/청크 처리 중] : ${file.name}</p>` + file.fullText.replace(/\n/g, '<br>');
+        $textViewer.innerHTML = `<p style="color:#FFD700;">[파일 로딩 중/청크 처리 중] : ${file.name}</p>`;
         renderFileList();
         return;
     }
@@ -747,6 +711,7 @@ function scrollToCurrentChunk() {
     }
 }
 
+
 function setupTextViewerClickEvent() {
     $textViewer.addEventListener('click', (e) => {
         const chunkElement = e.target.closest('.text-chunk');
@@ -774,9 +739,9 @@ function jumpToChunk(index) {
     $playPauseBtn.textContent = '⏸️';
 
     renderTextViewer(currentFileIndex);
-    requestWakeLock();
     speakNextChunk();
 }
+
 
 function renderFileList() {
     $fileList.innerHTML = '';
