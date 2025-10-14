@@ -232,13 +232,15 @@ async function fetchAndProcessUrlContent(url) {
         const htmlText = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
-        const novelContentElement = doc.getElementById('novel_content');
+        const novelContentElement = doc.getElementById('novel_content') || doc.getElementById('bo_v_con');
         let text = '';
         if (novelContentElement) {
-            text = novelContentElement.textContent || '';
+            // 여러 <p> 태그의 텍스트 추출
+            const pTags = novelContentElement.querySelectorAll('p');
+            text = Array.from(pTags).map(p => p.textContent.trim()).join('\n');
             text = text.trim();
         } else {
-            throw new Error("페이지에서 ID 'novel_content' 요소를 찾을 수 없습니다.");
+            throw new Error("페이지에서 ID 'novel_content' 또는 'bo_v_con' 요소를 찾을 수 없습니다.");
         }
         if (text.length < 50) throw new Error("추출된 텍스트 내용이 너무 짧습니다.");
 
