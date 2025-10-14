@@ -1,18 +1,20 @@
 // --- 전역 변수 설정 ---
 const MAX_FILES = 50; // 파일 첨부 최대 개수 50개
 const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수 (Web Speech API 안정성 고려)
+const SEQUENTIAL_PROCESSING_DELAY = 1000; // 백그라운드 파일 처리 시작 지연 시간 (ms)
 
 let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
 let isSequential = true; // 정주행 기능 상태 (기본값: true)
+let isProcessingInBackground = false; // 백그라운드 처리 중 상태 플래그
 
 // Web Speech API 객체
 const synth = window.speechSynthesis;
 let currentUtterance = null; // 현재 발화 중인 SpeechSynthesisUtterance 객체
 let isPaused = false;
 let isSpeaking = false;
-let wakeLock = null; // [NEW] Wake Lock 객체: 절전/화면 잠금 방지용
+let wakeLock = null; // Wake Lock 객체: 절전/화면 잠금 방지용
 
 // DOM 요소 캐시
 const $ = (selector) => document.querySelector(selector);
@@ -42,19 +44,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // 1. 목소리 목록 로드 및 설정 UI 초기화
     if (synth.getVoices().length > 0) {
         populateVoiceList(); 
     }
     synth.onvoiceschanged = populateVoiceList;
 
-    // 2. 파일 업로드 및 드래그&드롭 이벤트 설정
     $fileInput.addEventListener('change', handleFiles);
     $('#file-upload-btn').addEventListener('click', () => $fileInput.click());
     
     setupDragAndDrop();
 
-    // 3. 재생 컨트롤 및 설정 이벤트
     $('#play-pause-btn').addEventListener('click', togglePlayPause);
     $('#stop-btn').addEventListener('click', stopReading);
     $('#next-file-btn').addEventListener('click', () => changeFile(currentFileIndex + 1));
@@ -63,41 +62,30 @@ document.addEventListener('DOMContentLoaded', () => {
     $rateSlider.addEventListener('input', updateRateDisplay);
     $rateSlider.addEventListener('change', () => saveBookmark());
 
-    // 4. 북마크 로드 (설정 복원)
     loadBookmark();
     
-    // 5. 텍스트 뷰어 클릭 이벤트 설정
     setupTextViewerClickEvent();
 
-    // 6. 클립보드 입력 이벤트 설정
     $loadClipboardBtn.addEventListener('click', handleClipboardText);
-
-    // 7. URL 입력 이벤트 설정
     $loadUrlBtn.addEventListener('click', handleUrlText);
 
-    // 8. 정주행 체크박스 이벤트 설정
     $sequentialReadCheckbox.addEventListener('change', (e) => {
         isSequential = e.target.checked;
         saveBookmark(); 
     });
-    // 북마크에서 정주행 상태 복원
+    
     if(localStorage.getItem('autumnReaderBookmark')) {
         const bookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
         isSequential = bookmark.isSequential !== undefined ? bookmark.isSequential : true;
     }
     $sequentialReadCheckbox.checked = isSequential;
 
-    // 9. 전체 삭제 버튼 이벤트 설정
     $clearAllFilesBtn.addEventListener('click', clearAllFiles);
-    
-    // 10. 파일 목록 클릭 이벤트 위임 (개별 재생, 삭제)
     $fileList.addEventListener('click', handleFileListItemClick);
     
-    // 11. 드래그 앤 드롭을 위한 sortablejs 설정
     setupFileListSortable();
 });
 
-// 브라우저 종료 전 북마크 저장
 window.addEventListener('beforeunload', () => {
     saveBookmark();
     if (synth.speaking) {
@@ -105,7 +93,7 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-// --- 목소리 및 설정 기능 ---
+// --- 목소리 및 설정 기능 (생략, 변경 없음) ---
 
 function populateVoiceList() {
     const voices = synth.getVoices();
@@ -159,12 +147,11 @@ function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
 
-// --- Wake Lock API (절전/화면 잠금 방지) ---
+// --- Wake Lock API ---
 
 async function requestWakeLock() {
     if ('wakeLock' in navigator) {
         try {
-            // 'screen' 타입으로 화면을 켜진 상태로 유지
             wakeLock = await navigator.wakeLock.request('screen');
             wakeLock.addEventListener('release', () => {
                 console.log('Wake Lock released by system or manually.');
@@ -184,19 +171,13 @@ function releaseWakeLock() {
                 console.log('Wake Lock released successfully.');
             })
             .catch((err) => {
-                // 이미 해제된 경우 등 오류 발생 가능
                 console.error(`Wake Lock release failed: ${err.name}, ${err.message}`);
             });
     }
 }
 
-// ----------------------------------------
-
 // --- 파일 처리 및 분할 기능 ---
 
-/**
- * 인코딩을 지정하여 파일을 읽는 Promise 기반 헬퍼 함수
- */
 function readTextFile(file, encoding) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -206,35 +187,26 @@ function readTextFile(file, encoding) {
         reader.onerror = (e) => {
             reject(new Error(`파일 읽기 오류 (${encoding}): ${e.target.error.name}`));
         };
-        // 지정된 인코딩으로 파일 읽기 시도
         reader.readAsText(file, encoding);
     });
 }
 
-/**
- * URL에서 텍스트를 가져와 뷰어에 로드하고 처리합니다.
- */
+// URL 및 클립보드 처리 함수 (생략, 파일 로딩 후 청크 처리 로직만 변경)
+
 async function fetchAndProcessUrlContent(url) {
+    // ... 기존 코드 유지 ... (파일 데이터 생성 로직만 복사)
     if (!url) return;
-    
     const PROXY_URL = 'https://api.allorigins.win/raw?url='; 
     const targetUrl = PROXY_URL + encodeURIComponent(url);
-    
     try {
         $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다. (프록시 서버 사용)...</p>';
         stopReading(); 
-
         const response = await fetch(targetUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP 오류: ${response.status}`);
-        }
-        
+        if (!response.ok) throw new Error(`HTTP 오류: ${response.status}`);
         const htmlText = await response.text();
-
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
         const novelContentElement = doc.getElementById('novel_content');
-
         let text = '';
         if (novelContentElement) {
             text = novelContentElement.textContent || '';
@@ -242,14 +214,10 @@ async function fetchAndProcessUrlContent(url) {
         } else {
             throw new Error("페이지에서 ID 'novel_content' 요소를 찾을 수 없습니다.");
         }
-
-        if (text.length < 50) { 
-             throw new Error("추출된 텍스트 내용이 너무 짧습니다. (요소 ID 또는 페이지 내용 확인 필요)");
-        }
+        if (text.length < 50) throw new Error("추출된 텍스트 내용이 너무 짧습니다.");
 
         const fileId = Date.now();
         const fileName = `[URL] ${url.substring(0, 30)}...`;
-
         const newFileData = {
             id: fileId,
             name: fileName,
@@ -257,23 +225,23 @@ async function fetchAndProcessUrlContent(url) {
             chunks: [],
             isProcessed: false 
         };
-
         filesData.unshift(newFileData);
+        if (filesData.length > MAX_FILES) filesData.pop(); 
         
-        if (filesData.length > MAX_FILES) {
-            filesData.pop(); 
-        }
-
         renderFileList();
-        processFileChunks(0, false); 
+        // URL 로드 후 즉시 첫 파일 청크 처리 및 재생 시작
+        currentFileIndex = 0; 
+        processFileChunks(0, true, () => {
+            startSequentialProcessing(1); // 0번 파일 처리 후 1번 파일부터 순차 처리 시작
+        }); 
 
         $urlTextInput.value = '';
-
     } catch (error) {
-        alert(`URL 로드 실패: ${error.message}. 프록시 서버 문제일 수 있습니다. 다른 URL로 시도하거나 잠시 후 다시 시도해 보세요.`);
+        alert(`URL 로드 실패: ${error.message}.`);
         $textViewer.innerHTML = `<p style="color:red;">오류 발생: ${error.message}</p>`;
         renderFileList();
     }
+    // ...
 }
 
 function handleUrlText() {
@@ -305,19 +273,21 @@ function handleClipboardText() {
 
     filesData.unshift(newFileData);
     
-    if (filesData.length > MAX_FILES) {
-        filesData.pop(); 
-    }
+    if (filesData.length > MAX_FILES) filesData.pop(); 
 
     renderFileList();
-    processFileChunks(0, false); 
+    // 클립보드 로드 후 즉시 첫 파일 청크 처리 및 재생 시작
+    currentFileIndex = 0;
+    processFileChunks(0, true, () => {
+        startSequentialProcessing(1); // 0번 파일 처리 후 1번 파일부터 순차 처리 시작
+    }); 
 
     $clipboardTextInput.value = '';
 }
 
 
 /**
- * 파일 입력 이벤트 핸들러. (인코딩 변환 로직, Promise.all을 사용해 파일 로딩 후 정렬 및 처리)
+ * [수정] 파일 입력 핸들러: 청크 처리는 첫 파일만 즉시, 나머지는 백그라운드 순차 처리로 위임
  */
 function handleFiles(event) {
     const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
@@ -337,36 +307,26 @@ function handleFiles(event) {
     let chunkIndexForResume = JSON.parse(bookmarkData)?.chunkIndex || 0;
     let newFileIndexForResume = -1;
 
-    // 1. 모든 파일 읽기를 Promise로 감싸서 비동기 처리
     const filePromises = newFiles.map(file => {
         return (async () => { 
             let content = '';
-            
-            // 1차 시도: UTF-8로 읽기
+            // UTF-8 -> windows-949 인코딩 폴백 로직 (생략, 변경 없음)
             try {
                 content = await readTextFile(file, 'UTF-8');
             } catch (error) {
-                // UTF-8 읽기 중 오류 발생 (희귀)
                 console.warn(`UTF-8 읽기 중 오류 발생: ${error.message}`);
             }
-            
-            // 2차 시도: UTF-8 실패 징후 (Replacement Character: )가 있거나 내용이 비어있으면 windows-949로 재시도
             if (content.includes('\ufffd') || !content) {
                 try {
                     content = await readTextFile(file, 'windows-949');
-                    
                     if (!content) throw new Error("인코딩 재시도 후에도 내용이 비어있습니다.");
-                    
                     console.log(`파일 "${file.name}"을(를) ANSI/windows-949 인코딩으로 읽었습니다.`);
-                    
                 } catch (error) {
-                    // 최종 실패
                     alert(`파일 "${file.name}"을(를) 읽는 데 실패했습니다. 파일 인코딩을 확인해 주세요.`);
-                    return null; // 이 파일은 목록에서 제외
+                    return null;
                 }
             }
 
-            // 파일 메타데이터 생성
             const fileId = Date.now() + Math.random(); 
             return {
                 id: fileId,
@@ -378,7 +338,6 @@ function handleFiles(event) {
         })(); 
     });
 
-    // 2. 모든 파일 읽기가 완료되면 정렬 및 처리 시작
     Promise.all(filePromises).then(results => {
         
         const newlyReadFiles = results.filter(file => file !== null); 
@@ -388,14 +347,11 @@ function handleFiles(event) {
             return;
         }
 
-        // --- 파일명 기준 오름차순 정렬 ---
         newlyReadFiles.sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
 
         const startIndex = filesData.length;
-        
         filesData.push(...newlyReadFiles);
         
-        // 3. 북마크 복원 로직
         let shouldResume = false;
         if (resumeTargetFileName) {
             const resumeFileIndexInNewList = newlyReadFiles.findIndex(f => f.name === resumeTargetFileName);
@@ -405,22 +361,35 @@ function handleFiles(event) {
             }
         }
         
+        let startProcessingIndex = startIndex; // 순차 처리 시작 인덱스
+
         if (shouldResume) {
             const resume = confirm(`[북마크 복원] "${filesData[newFileIndexForResume].name}"의 저장된 위치(${chunkIndexForResume + 1}번째 청크)부터 이어서 읽으시겠습니까?`);
 
             if (resume) {
                 currentFileIndex = newFileIndexForResume;
                 currentChunkIndex = chunkIndexForResume;
-                processFileChunks(currentFileIndex, true); 
-                processFileChunksInSequence(startIndex, currentFileIndex);
-            } else {
-                 processFileChunksInSequence(startIndex, -1);
+                
+                // 북마크 파일은 즉시 청크 처리 (재생 시작 준비)
+                processFileChunks(currentFileIndex, true, () => {
+                    startSequentialProcessing(startIndex); // 나머지 파일 순차 처리 시작
+                });
+                
+                startProcessingIndex = -1; // 이미 처리했으므로 순차 처리에서 제외
             }
-        } else {
-            if (currentFileIndex === -1) {
-                currentFileIndex = startIndex; 
-            }
-            processFileChunksInSequence(startIndex, -1);
+        } else if (currentFileIndex === -1) {
+            currentFileIndex = startIndex; 
+            
+            // 첫 파일만 즉시 청크 처리
+            processFileChunks(currentFileIndex, false, () => {
+                startSequentialProcessing(startIndex + 1); // 다음 파일부터 순차 처리 시작
+            });
+            startProcessingIndex = startIndex; // 순차 처리 시작 인덱스는 첫 파일의 다음 파일
+        }
+        
+        // 북마크 복원이 없거나 첫 파일이 아닌 경우 순차 처리 시작
+        if (startProcessingIndex !== -1) {
+            startSequentialProcessing(startProcessingIndex);
         }
         
         renderFileList();
@@ -428,6 +397,88 @@ function handleFiles(event) {
     
     event.target.value = '';
 }
+
+/**
+ * [수정] 텍스트를 청크로 분할하고, 완료 후 콜백 함수를 실행합니다.
+ * @param {number} fileIndex 처리할 파일 인덱스
+ * @param {boolean} startReading 청크 처리 완료 후 즉시 재생 시작 여부
+ * @param {function} callback 청크 처리 완료 후 실행할 함수 (선택 사항)
+ */
+function processFileChunks(fileIndex, startReading, callback = () => {}) {
+    const file = filesData[fileIndex];
+    if (!file || file.isProcessed) {
+        callback();
+        return;
+    }
+
+    const text = file.fullText;
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
+    
+    let currentChunk = '';
+    
+    sentences.forEach(sentence => {
+        if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
+            file.chunks.push(currentChunk.trim());
+            currentChunk = sentence;
+        } else {
+            currentChunk += sentence;
+        }
+    });
+
+    if (currentChunk.trim()) {
+        file.chunks.push(currentChunk.trim());
+    }
+    
+    if (file.chunks.length > 0) {
+        file.isProcessed = true;
+        console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
+    }
+
+    if (startReading && currentFileIndex === fileIndex) {
+        renderTextViewer(fileIndex); 
+        startReadingFromCurrentChunk(); 
+    } 
+    
+    renderFileList(); // 파일 목록에서 처리 완료 상태 업데이트 (선택적)
+    callback();
+}
+
+
+/**
+ * [NEW] 백그라운드에서 나머지 파일들을 순차적으로 처리합니다.
+ * @param {number} startIndex 순차 처리를 시작할 파일 인덱스
+ */
+function startSequentialProcessing(startIndex) {
+    if (isProcessingInBackground) return;
+    isProcessingInBackground = true;
+
+    // 비동기 처리 함수 (재귀 호출로 순차성을 보장)
+    const processNext = (index) => {
+        if (index >= filesData.length) {
+            isProcessingInBackground = false;
+            console.log("백그라운드 파일 처리 완료.");
+            return;
+        }
+
+        const file = filesData[index];
+        // 이미 처리되었거나, 현재 재생 중인 파일이라면 건너뜁니다.
+        if (file.isProcessed || index === currentFileIndex) {
+            processNext(index + 1);
+            return;
+        }
+
+        // 지연 후 청크 처리 시작 (리소스를 즉시 모두 점유하는 것을 방지)
+        setTimeout(() => {
+            console.log(`[백그라운드] 파일 "${file.name}" 처리 시작...`);
+            processFileChunks(index, false, () => {
+                processNext(index + 1); // 콜백에서 다음 파일 처리 호출
+            });
+        }, SEQUENTIAL_PROCESSING_DELAY);
+    };
+
+    processNext(startIndex);
+}
+
 
 function setupDragAndDrop() {
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -457,53 +508,19 @@ function setupDragAndDrop() {
 }
 
 
-function processFileChunks(fileIndex, startReading) {
-    const file = filesData[fileIndex];
-    if (!file || file.isProcessed) return;
-
-    const text = file.fullText;
-    const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
-    
-    let currentChunk = '';
-    
-    sentences.forEach(sentence => {
-        if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
-            file.chunks.push(currentChunk.trim());
-            currentChunk = sentence;
-        } else {
-            currentChunk += sentence;
-        }
-    });
-
-    if (currentChunk.trim()) {
-        file.chunks.push(currentChunk.trim());
-    }
-    
-    if (file.chunks.length > 0) {
-        file.isProcessed = true;
-    }
-
-    if (startReading && currentFileIndex === fileIndex) {
-        renderTextViewer(fileIndex); 
-        startReadingFromCurrentChunk(); 
-    } 
-}
-
-function processFileChunksInSequence(startIndex, skipIndex) {
-    for(let i = startIndex; i < filesData.length; i++) {
-        if (i === skipIndex) continue; 
-
-        setTimeout(() => processFileChunks(i, false), 100 * (i - startIndex));
-    }
-}
-
-// --- 재생 컨트롤 기능 ---
+// --- 재생 컨트롤 기능 (생략, 변경 없음) ---
 
 function startReadingFromCurrentChunk() {
     if (currentFileIndex === -1) return;
 
     const file = filesData[currentFileIndex];
     if (!file || !file.isProcessed) {
+        // [FIX] 재생 시도 시 처리 중이라면, 처리를 시작하도록 유도
+        if (file && !file.isProcessed) {
+             alert(`파일 "${file.name}"을(를) 먼저 청크 처리해야 합니다. 처리를 시작합니다.`);
+             processFileChunks(currentFileIndex, true); // 처리 후 재생 시작
+             return;
+        }
         alert("텍스트 분할 처리 중입니다. 잠시 후 다시 시도해 주세요.");
         return;
     }
@@ -518,7 +535,7 @@ function startReadingFromCurrentChunk() {
 
     synth.cancel();
     
-    requestWakeLock(); // [NEW FEATURE] 재생 시작 시 Wake Lock 요청
+    requestWakeLock();
     
     speakNextChunk();
 }
@@ -532,8 +549,7 @@ function speakNextChunk() {
         if (isSequential) {
             changeFile(currentFileIndex + 1);
         } else {
-            // 정주행이 아니면 재생 목록 끝에서 멈춥니다.
-            stopReading(); // stopReading 내부에서 releaseWakeLock() 호출
+            stopReading();
         }
         return;
     }
@@ -570,12 +586,12 @@ function togglePlayPause() {
         synth.pause();
         isPaused = true;
         $playPauseBtn.textContent = '▶️';
-        releaseWakeLock(); // 일시정지 시 Wake Lock 해제 (선택 사항)
+        releaseWakeLock();
     } else if (isSpeaking && isPaused) {
         synth.resume();
         isPaused = false;
         $playPauseBtn.textContent = '⏸️';
-        requestWakeLock(); // 다시 재생 시 Wake Lock 요청
+        requestWakeLock();
     } else {
         startReadingFromCurrentChunk();
     }
@@ -588,13 +604,16 @@ function stopReading() {
     currentChunkIndex = 0; 
     $playPauseBtn.textContent = '▶️';
     
-    releaseWakeLock(); // [NEW FEATURE] 정지 시 Wake Lock 해제
+    releaseWakeLock();
     
     if(currentFileIndex !== -1) {
         renderTextViewer(currentFileIndex); 
     }
 }
 
+/**
+ * [FIX] 파일 변경 시, 대상 파일이 아직 처리되지 않았다면 처리를 먼저 시작하도록 유도
+ */
 function changeFile(newIndex) {
     if (newIndex < 0 || newIndex >= filesData.length) {
         alert("더 이상 읽을 파일이 없습니다.");
@@ -609,7 +628,11 @@ function changeFile(newIndex) {
     currentChunkIndex = 0; 
     
     if (!filesData[newIndex].isProcessed) {
-        processFileChunks(newIndex, true);
+        // 청크 처리가 안 되어있으면, 처리를 시작하고 완료 후 재생을 시작합니다.
+        processFileChunks(newIndex, true, () => {
+            // 처리 완료 후 다음 파일의 순차 처리 시작을 재개합니다.
+            startSequentialProcessing(newIndex + 1);
+        }); 
     } else {
         renderTextViewer(newIndex); 
         if (isSpeaking) {
@@ -618,11 +641,8 @@ function changeFile(newIndex) {
     }
 }
 
-// --- 파일 목록 관리 기능 ---
+// --- 파일 목록 관리 기능 (생략, 변경 없음) ---
 
-/**
- * [FIX] 개별 파일 삭제 및 재생 시작 로직 통합
- */
 function handleFileListItemClick(e) {
     const li = e.target.closest('li');
     if (!li) return;
@@ -631,39 +651,36 @@ function handleFileListItemClick(e) {
     const fileIndex = filesData.findIndex(f => f.id === fileId);
     if (fileIndex === -1) return;
 
-    // 1. 삭제 버튼 클릭 시 (Issue 2 Fix: deleteFile 호출 후 즉시 반환)
     if (e.target.classList.contains('delete-file-btn')) {
         deleteFile(fileIndex);
         return; 
     }
     
-    // 2. 순서 변경 버튼 클릭 시
     if (e.target.classList.contains('drag-handle')) {
         return;
     }
 
-    // 3. 파일 이름 영역 클릭 시 (Issue 1 Fix: 다른 파일 클릭 시 자동 재생)
     const isFileChanged = fileIndex !== currentFileIndex;
 
     if (isFileChanged) {
-        stopReading(); // 기존 재생 중지 (Wake Lock 해제 포함)
+        stopReading(); 
         
         currentFileIndex = fileIndex;
         currentChunkIndex = 0; 
     }
     
-    // 재생 시작 로직 (파일이 변경되었거나, 같은 파일인데 재생 중이 아닐 때)
     if (isFileChanged || (!isSpeaking && currentFileIndex === fileIndex)) {
         if (!filesData[currentFileIndex].isProcessed) {
              // 청크 처리 후 재생 시작
-             processFileChunks(currentFileIndex, true); 
+             processFileChunks(currentFileIndex, true, () => {
+                 // 재생 시작 후 다음 파일의 순차 처리 시작을 재개합니다.
+                 startSequentialProcessing(currentFileIndex + 1);
+             }); 
         } else {
-             // 즉시 재생 시작
              startReadingFromCurrentChunk(); 
         }
     }
     
-    // UI 업데이트
     renderFileList();
     renderTextViewer(currentFileIndex);
 }
@@ -701,6 +718,7 @@ function clearAllFiles() {
     filesData = [];
     currentFileIndex = -1;
     currentChunkIndex = 0;
+    isProcessingInBackground = false; // 백그라운드 처리 중지
     
     localStorage.removeItem('autumnReaderBookmark');
     
@@ -719,7 +737,7 @@ function setupFileListSortable() {
         animation: 150,
         onEnd: function (evt) {
             const oldIndex = evt.oldIndex;
-            const newIndex = evt.newIndex;
+            const newIndex = evt.newState.newIndex; // Sortable.js 최신 버전 호환성
             
             const [movedItem] = filesData.splice(oldIndex, 1);
             filesData.splice(newIndex, 0, movedItem);
@@ -739,7 +757,7 @@ function setupFileListSortable() {
 }
 
 
-// --- UI 및 북마크 기능 ---
+// --- UI 및 북마크 기능 (생략, 변경 없음) ---
 
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
@@ -810,7 +828,7 @@ function jumpToChunk(index) {
     $playPauseBtn.textContent = '⏸️';
 
     renderTextViewer(currentFileIndex);
-    requestWakeLock(); // 점프 재생 시작 시 Wake Lock 요청
+    requestWakeLock();
     speakNextChunk();
 }
 
@@ -837,6 +855,14 @@ function renderFileList() {
         deleteBtn.innerHTML = 'X';
         deleteBtn.classList.add('delete-file-btn');
         deleteBtn.title = '파일 삭제';
+        
+        // [수정] 처리 완료 상태 표시
+        if (!file.isProcessed) {
+            const statusSpan = document.createElement('span');
+            statusSpan.textContent = isProcessingInBackground ? ' (⏳ 대기)' : ' (❗️ 미처리)';
+            statusSpan.style.color = isProcessingInBackground ? '#FFD700' : '#FF6347';
+            fileNameSpan.appendChild(statusSpan);
+        }
         
         controlsDiv.appendChild(dragHandle);
         controlsDiv.appendChild(deleteBtn);
