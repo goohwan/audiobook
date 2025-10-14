@@ -1,12 +1,14 @@
 // --- 전역 변수 설정 ---
 const MAX_FILES = 50; // 파일 첨부 최대 개수 50개
-const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수 (Web Speech API 안정성 고려)
+const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수
 const PRELOAD_NEXT_CHUNKS = 2; // 미리 큐잉할 다음 청크 수
+const VISIBLE_CHUNKS = 10; // 가상화: 한 번에 렌더링할 청크 수
 
 let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
 let isSequential = true; // 정주행 기능 상태 (기본값: true)
+let wakeLock = null; // Wake Lock 객체
 
 // Web Speech API 객체
 const synth = window.speechSynthesis;
@@ -25,17 +27,15 @@ const $rateSlider = $('#rate-slider');
 const $rateDisplay = $('#rate-display');
 const $playPauseBtn = $('#play-pause-btn');
 
-// --- 추가된 DOM 요소 ---
+// 추가된 DOM 요소
 const $clipboardTextInput = $('#clipboard-text-input');
 const $loadClipboardBtn = $('#load-clipboard-btn');
 const $urlTextInput = $('#url-text-input');
 const $loadUrlBtn = $('#load-url-btn');
-const $sequentialReadCheckbox = $('#sequential-read-checkbox'); // 정주행 체크박스
-const $clearAllFilesBtn = $('#clear-all-files-btn'); // 전체 삭제 버튼
-// ----------------------------------------
+const $sequentialReadCheckbox = $('#sequential-read-checkbox');
+const $clearAllFilesBtn = $('#clear-all-files-btn');
 
 // --- 초기화 및 이벤트 리스너 ---
-
 document.addEventListener('DOMContentLoaded', () => {
     if (!('speechSynthesis' in window)) {
         alert('죄송합니다. 이 브라우저는 Web Speech API를 지원하지 않아 서비스를 이용할 수 없습니다.');
@@ -43,13 +43,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (synth.getVoices().length > 0) {
-        populateVoiceList(); 
+        populateVoiceList();
     }
     synth.onvoiceschanged = populateVoiceList;
 
     $fileInput.addEventListener('change', handleFiles);
     $('#file-upload-btn').addEventListener('click', () => $fileInput.click());
-    
+
     setupDragAndDrop();
 
     $('#play-pause-btn').addEventListener('click', togglePlayPause);
@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $rateSlider.addEventListener('change', () => saveBookmark());
 
     loadBookmark();
-    
+
     setupTextViewerClickEvent();
 
     $loadClipboardBtn.addEventListener('click', handleClipboardText);
@@ -69,10 +69,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $sequentialReadCheckbox.addEventListener('change', (e) => {
         isSequential = e.target.checked;
-        saveBookmark(); 
+        saveBookmark();
     });
-    
-    if(localStorage.getItem('autumnReaderBookmark')) {
+
+    if (localStorage.getItem('autumnReaderBookmark')) {
         const bookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
         isSequential = bookmark.isSequential !== undefined ? bookmark.isSequential : true;
     }
@@ -80,23 +80,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $clearAllFilesBtn.addEventListener('click', clearAllFiles);
     $fileList.addEventListener('click', handleFileListItemClick);
-    
+
     setupFileListSortable();
 
-    // 모바일 백그라운드 재생을 위한 visibilitychange 이벤트
+    // 모바일 백그라운드 재생 및 화면 켜둠
     document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
-function handleVisibilityChange() {
+async function handleVisibilityChange() {
     if (document.visibilityState === 'hidden') {
         if (isSpeaking && !isPaused) {
             synth.pause();
             isPaused = true;
         }
-    } else if (document.visibilityState === 'visible') {
-        if (isSpeaking && isPaused) {
-            synth.resume();
-            isPaused = false;
+    } else if (document.visibilityState === 'visible' && isSpeaking && isPaused) {
+        synth.resume();
+        isPaused = false;
+        if (isSpeaking) {
+            await requestWakeLock();
         }
     }
 }
@@ -106,13 +107,41 @@ window.addEventListener('beforeunload', () => {
     if (synth.speaking) {
         synth.cancel();
     }
+    releaseWakeLock();
 });
 
-// --- 목소리 및 설정 기능 ---
+// --- Wake Lock API ---
+async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => {
+                console.log('Wake Lock released.');
+            });
+            console.log('Wake Lock requested.');
+        } catch (err) {
+            console.warn(`Wake Lock request failed: ${err.name}, ${err.message}`);
+        }
+    } else {
+        console.warn('Wake Lock API is not supported in this browser.');
+    }
+}
 
+function releaseWakeLock() {
+    if (wakeLock) {
+        wakeLock.release().then(() => {
+            wakeLock = null;
+            console.log('Wake Lock released successfully.');
+        }).catch((err) => {
+            console.error(`Wake Lock release failed: ${err.name}, ${err.message}`);
+        });
+    }
+}
+
+// --- 목소리 및 설정 기능 ---
 function populateVoiceList() {
     const voices = synth.getVoices();
-    $voiceSelect.innerHTML = ''; 
+    $voiceSelect.innerHTML = '';
 
     let koreanVoices = [];
     let googleKoreanVoiceName = null;
@@ -121,12 +150,10 @@ function populateVoiceList() {
 
     voices.forEach((voice) => {
         const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
-        
         if (voice.lang.includes('ko')) {
             koreanVoices.push(option);
-            
             if (voice.name.includes('Google') || voice.name.includes('Standard') || voice.name.includes('Wavenet')) {
-                 googleKoreanVoiceName = voice.name;
+                googleKoreanVoiceName = voice.name;
             }
         }
     });
@@ -140,17 +167,16 @@ function populateVoiceList() {
     }
 
     const savedBookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
-
     if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
-         selectedVoice = savedBookmark.settings.voice;
+        selectedVoice = savedBookmark.settings.voice;
     } else if (preferredVoiceName) {
-         selectedVoice = preferredVoiceName;
+        selectedVoice = preferredVoiceName;
     }
-    
-    if(selectedVoice) {
-         $voiceSelect.value = selectedVoice;
+
+    if (selectedVoice) {
+        $voiceSelect.value = selectedVoice;
     }
-    
+
     if (savedBookmark && savedBookmark.settings) {
         $rateSlider.value = savedBookmark.settings.rate;
     }
@@ -163,7 +189,6 @@ function updateRateDisplay() {
 }
 
 // --- 파일 처리 및 분할 기능 ---
-
 function readTextFile(file, encoding) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -177,15 +202,13 @@ function readTextFile(file, encoding) {
     });
 }
 
-// URL 및 클립보드 처리 함수
-
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
-    const PROXY_URL = 'https://api.allorigins.win/raw?url='; 
+    const PROXY_URL = 'https://api.allorigins.win/raw?url=';
     const targetUrl = PROXY_URL + encodeURIComponent(url);
     try {
-        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다. (프록시 서버 사용)...</p>';
-        stopReading(); 
+        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다...</p>';
+        stopReading();
         const response = await fetch(targetUrl);
         if (!response.ok) throw new Error(`HTTP 오류: ${response.status}`);
         const htmlText = await response.text();
@@ -201,22 +224,21 @@ async function fetchAndProcessUrlContent(url) {
         }
         if (text.length < 50) throw new Error("추출된 텍스트 내용이 너무 짧습니다.");
 
-        const fileId = Date.now() + Math.floor(Math.random() * 1000000); // ID 강화
+        const fileId = Date.now() + Math.floor(Math.random() * 1000000);
         const fileName = `[URL] ${url.substring(0, 30)}...`;
         const newFileData = {
             id: fileId,
             name: fileName,
             fullText: text,
             chunks: [],
-            isProcessed: false 
+            isProcessed: false
         };
         filesData.unshift(newFileData);
-        if (filesData.length > MAX_FILES) filesData.pop(); 
-        
+        if (filesData.length > MAX_FILES) filesData.pop();
+
         renderFileList();
-        // URL 로드 후 즉시 첫 파일 청크 처리 및 재생 시작
-        currentFileIndex = 0; 
-        processFileChunks(0, true); 
+        currentFileIndex = 0;
+        processFileChunks(0, true);
 
         $urlTextInput.value = '';
     } catch (error) {
@@ -242,7 +264,7 @@ function handleClipboardText() {
         return;
     }
 
-    const fileId = Date.now() + Math.floor(Math.random() * 1000000); // ID 강화
+    const fileId = Date.now() + Math.floor(Math.random() * 1000000);
     const fileName = `[클립보드] ${new Date().toLocaleTimeString()}`;
 
     const newFileData = {
@@ -250,32 +272,25 @@ function handleClipboardText() {
         name: fileName,
         fullText: text,
         chunks: [],
-        isProcessed: false 
+        isProcessed: false
     };
 
     filesData.unshift(newFileData);
-    
-    if (filesData.length > MAX_FILES) filesData.pop(); 
+    if (filesData.length > MAX_FILES) filesData.pop();
 
     renderFileList();
-    // 클립보드 로드 후 즉시 첫 파일 청크 처리 및 재생 시작
     currentFileIndex = 0;
-    processFileChunks(0, true); 
+    processFileChunks(0, true);
 
     $clipboardTextInput.value = '';
 }
 
-/**
- * 파일 입력 핸들러: 첫 파일만 즉시 처리
- */
 function handleFiles(event) {
     const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
-    
     if (filesData.length + newFiles.length > MAX_FILES) {
         alert(`최대 ${MAX_FILES}개 파일만 첨부할 수 있습니다.`);
-        newFiles.splice(MAX_FILES - filesData.length); 
+        newFiles.splice(MAX_FILES - filesData.length);
     }
-    
     if (newFiles.length === 0) {
         event.target.value = '';
         return;
@@ -287,7 +302,7 @@ function handleFiles(event) {
     let newFileIndexForResume = -1;
 
     const filePromises = newFiles.map(file => {
-        return (async () => { 
+        return (async () => {
             let content = '';
             try {
                 content = await readTextFile(file, 'UTF-8');
@@ -305,31 +320,28 @@ function handleFiles(event) {
                 }
             }
 
-            const fileId = Date.now() + Math.floor(Math.random() * 1000000); // ID 강화
+            const fileId = Date.now() + Math.floor(Math.random() * 1000000);
             return {
                 id: fileId,
                 name: file.name,
                 fullText: content,
                 chunks: [],
-                isProcessed: false 
+                isProcessed: false
             };
-        })(); 
+        })();
     });
 
     Promise.all(filePromises).then(results => {
-        
-        const newlyReadFiles = results.filter(file => file !== null); 
-        
+        const newlyReadFiles = results.filter(file => file !== null);
         if (newlyReadFiles.length === 0) {
             event.target.value = '';
             return;
         }
 
         newlyReadFiles.sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
-
         const startIndex = filesData.length;
         filesData.push(...newlyReadFiles);
-        
+
         let shouldResume = false;
         if (resumeTargetFileName) {
             const resumeFileIndexInNewList = newlyReadFiles.findIndex(f => f.name === resumeTargetFileName);
@@ -338,42 +350,33 @@ function handleFiles(event) {
                 shouldResume = true;
             }
         }
-        
+
         if (shouldResume) {
             const resume = confirm(`[북마크 복원] "${filesData[newFileIndexForResume].name}"의 저장된 위치(${chunkIndexForResume + 1}번째 청크)부터 이어서 읽으시겠습니까?`);
-
             if (resume) {
                 currentFileIndex = newFileIndexForResume;
                 currentChunkIndex = chunkIndexForResume;
-                
-                processFileChunks(currentFileIndex, true); 
+                processFileChunks(currentFileIndex, true);
             }
         } else if (currentFileIndex === -1) {
-            currentFileIndex = startIndex; 
-            
-            processFileChunks(currentFileIndex, false); 
+            currentFileIndex = startIndex;
+            processFileChunks(currentFileIndex, false);
         }
-        
-        renderFileList();
+
+        requestAnimationFrame(renderFileList);
     });
-    
+
     event.target.value = '';
 }
 
-/**
- * 텍스트를 청크로 분할합니다.
- * @param {number} fileIndex 처리할 파일 인덱스
- * @param {boolean} startReading 청크 처리 완료 후 즉시 재생 시작 여부
- */
 function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || file.isProcessed) return;
 
     const text = file.fullText;
     const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
-    
     let currentChunk = '';
-    
+
     sentences.forEach(sentence => {
         if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
             file.chunks.push(currentChunk.trim());
@@ -386,18 +389,18 @@ function processFileChunks(fileIndex, startReading) {
     if (currentChunk.trim()) {
         file.chunks.push(currentChunk.trim());
     }
-    
+
     if (file.chunks.length > 0) {
         file.isProcessed = true;
         console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
     }
 
     if (startReading && currentFileIndex === fileIndex) {
-        renderTextViewer(fileIndex); 
-        startReadingFromCurrentChunk(); 
-    } 
-    
-    renderFileList(); // 파일 목록에서 처리 완료 상태 업데이트
+        requestAnimationFrame(() => renderTextViewer(fileIndex));
+        startReadingFromCurrentChunk();
+    }
+
+    requestAnimationFrame(renderFileList);
 }
 
 function setupDragAndDrop() {
@@ -428,35 +431,31 @@ function setupDragAndDrop() {
 }
 
 // --- 재생 컨트롤 기능 ---
-
-function startReadingFromCurrentChunk() {
+async function startReadingFromCurrentChunk() {
     if (currentFileIndex === -1) return;
 
     const file = filesData[currentFileIndex];
     if (!file || !file.isProcessed) {
         alert(`파일 "${file.name}"을(를) 먼저 청크 처리해야 합니다. 처리를 시작합니다.`);
-        processFileChunks(currentFileIndex, true); // 처리 후 재생 시작
+        processFileChunks(currentFileIndex, true);
         return;
     }
 
     currentChunkIndex = Math.min(currentChunkIndex, file.chunks.length - 1);
-    
-    renderTextViewer(currentFileIndex); 
-    
     isSpeaking = true;
     isPaused = false;
     $playPauseBtn.textContent = '⏸️';
 
     synth.cancel();
-    
+    await requestWakeLock();
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
     speakNextChunk();
 }
 
 function speakNextChunk() {
     const file = filesData[currentFileIndex];
-    
-    if (!isSpeaking || isPaused) return; 
-    
+    if (!isSpeaking || isPaused) return;
+
     if (currentChunkIndex >= file.chunks.length) {
         if (isSequential) {
             changeFile(currentFileIndex + 1);
@@ -467,22 +466,20 @@ function speakNextChunk() {
     }
 
     const textToSpeak = file.chunks[currentChunkIndex];
-    renderTextViewer(currentFileIndex); 
-
     currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
-    
     currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value);
     currentUtterance.rate = parseFloat($rateSlider.value);
-    currentUtterance.pitch = 1; 
+    currentUtterance.pitch = 1;
 
     currentUtterance.onend = () => {
         currentChunkIndex++;
-        saveBookmark(); 
-        setTimeout(speakNextChunk, 50); 
+        saveBookmark();
+        requestAnimationFrame(() => renderTextViewer(currentFileIndex));
+        setTimeout(speakNextChunk, 50);
     };
-    
+
     currentUtterance.onpause = () => {
-         isPaused = true;
+        isPaused = true;
     };
 
     synth.speak(currentUtterance);
@@ -497,8 +494,9 @@ function speakNextChunk() {
             nextUtterance.pitch = currentUtterance.pitch;
             nextUtterance.onend = () => {
                 currentChunkIndex = nextIndex + 1;
-                saveBookmark(); 
-                setTimeout(speakNextChunk, 50); 
+                saveBookmark();
+                requestAnimationFrame(() => renderTextViewer(currentFileIndex));
+                setTimeout(speakNextChunk, 50);
             };
             synth.speak(nextUtterance);
         }
@@ -515,10 +513,12 @@ function togglePlayPause() {
         synth.pause();
         isPaused = true;
         $playPauseBtn.textContent = '▶️';
+        releaseWakeLock();
     } else if (isSpeaking && isPaused) {
         synth.resume();
         isPaused = false;
         $playPauseBtn.textContent = '⏸️';
+        requestWakeLock();
     } else {
         startReadingFromCurrentChunk();
     }
@@ -528,11 +528,11 @@ function stopReading() {
     synth.cancel();
     isSpeaking = false;
     isPaused = false;
-    currentChunkIndex = 0; 
+    currentChunkIndex = 0;
     $playPauseBtn.textContent = '▶️';
-    
-    if(currentFileIndex !== -1) {
-        renderTextViewer(currentFileIndex); 
+    releaseWakeLock();
+    if (currentFileIndex !== -1) {
+        requestAnimationFrame(() => renderTextViewer(currentFileIndex));
     }
 }
 
@@ -540,19 +540,19 @@ function changeFile(newIndex) {
     if (newIndex < 0 || newIndex >= filesData.length) {
         alert("더 이상 읽을 파일이 없습니다.");
         stopReading();
-        currentFileIndex = -1; 
-        renderTextViewer(-1);
+        currentFileIndex = -1;
+        requestAnimationFrame(() => renderTextViewer(-1));
         return;
     }
-    
-    synth.cancel(); 
+
+    synth.cancel();
     currentFileIndex = newIndex;
-    currentChunkIndex = 0; 
-    
+    currentChunkIndex = 0;
+
     if (!filesData[newIndex].isProcessed) {
-        processFileChunks(newIndex, true); 
+        processFileChunks(newIndex, true);
     } else {
-        renderTextViewer(newIndex); 
+        requestAnimationFrame(() => renderTextViewer(newIndex));
         if (isSpeaking) {
             startReadingFromCurrentChunk();
         }
@@ -560,61 +560,58 @@ function changeFile(newIndex) {
 }
 
 // --- 파일 목록 관리 기능 ---
-
 function handleFileListItemClick(e) {
     const li = e.target.closest('li');
     if (!li) return;
-    
+
     const fileId = parseInt(li.dataset.fileId);
     const fileIndex = filesData.findIndex(f => f.id === fileId);
     if (fileIndex === -1) return;
 
     if (e.target.classList.contains('delete-file-btn')) {
-        e.stopPropagation(); // 버블링 방지
+        e.stopPropagation();
         deleteFile(fileIndex);
-        return; 
+        return;
     }
-    
+
     if (e.target.classList.contains('drag-handle')) {
         return;
     }
 
-    // 재생 중이면 멈추고, 새 파일로 변경 후 재생 시작
     if (isSpeaking || isPaused) {
         stopReading();
     }
 
     currentFileIndex = fileIndex;
-    currentChunkIndex = 0; 
+    currentChunkIndex = 0;
 
     if (!filesData[currentFileIndex].isProcessed) {
-        processFileChunks(currentFileIndex, true); 
+        processFileChunks(currentFileIndex, true);
     } else {
-        startReadingFromCurrentChunk(); 
+        startReadingFromCurrentChunk();
     }
-    
-    renderFileList();
-    renderTextViewer(currentFileIndex);
+
+    requestAnimationFrame(renderFileList);
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
 }
 
 function deleteFile(index) {
     if (index === -1) return;
 
     const wasCurrentFile = index === currentFileIndex;
-
     filesData.splice(index, 1);
-    
+
     if (wasCurrentFile) {
         stopReading();
         currentFileIndex = filesData.length > 0 ? 0 : -1;
         currentChunkIndex = 0;
-        renderTextViewer(currentFileIndex);
+        requestAnimationFrame(() => renderTextViewer(currentFileIndex));
     } else if (index < currentFileIndex) {
-        currentFileIndex--; 
+        currentFileIndex--;
     }
-    
-    renderFileList();
-    saveBookmark(); 
+
+    requestAnimationFrame(renderFileList);
+    saveBookmark();
 
     if (filesData.length === 0) {
         $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
@@ -630,26 +627,22 @@ function clearAllFiles() {
     filesData = [];
     currentFileIndex = -1;
     currentChunkIndex = 0;
-    
     localStorage.removeItem('autumnReaderBookmark');
-    
-    renderFileList();
+    requestAnimationFrame(renderFileList);
     $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
 }
 
-
 function setupFileListSortable() {
     if (typeof Sortable === 'undefined') {
-        return; 
+        return;
     }
 
     new Sortable($fileList, {
-        handle: '.drag-handle', 
+        handle: '.drag-handle',
         animation: 150,
         onEnd: function (evt) {
             const oldIndex = evt.oldIndex;
-            const newIndex = evt.newIndex; 
-            
+            const newIndex = evt.newIndex;
             const [movedItem] = filesData.splice(oldIndex, 1);
             filesData.splice(newIndex, 0, movedItem);
 
@@ -660,47 +653,41 @@ function setupFileListSortable() {
             } else if (oldIndex > currentFileIndex && newIndex <= currentFileIndex) {
                 currentFileIndex++;
             }
-            
-            renderFileList();
+
+            requestAnimationFrame(renderFileList);
             saveBookmark();
         },
     });
 }
 
-
 // --- UI 및 북마크 기능 ---
-
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
         $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
-        renderFileList();
         return;
     }
 
     const file = filesData[fileIndex];
-
     if (!file.isProcessed) {
         $textViewer.innerHTML = `<p style="color:#FFD700;">[파일 로딩 중/청크 처리 중] : ${file.name}</p>`;
-        renderFileList();
         return;
     }
 
-    const allChunks = file.chunks;
+    // 가상화: 현재 청크 주변만 렌더링
+    const startIndex = Math.max(0, currentChunkIndex - Math.floor(VISIBLE_CHUNKS / 2));
+    const endIndex = Math.min(file.chunks.length, startIndex + VISIBLE_CHUNKS);
     let htmlContent = '';
-    
-    allChunks.forEach((chunk, index) => {
-        let chunkHtml = chunk.replace(/\n/g, '<br>');
-        
-        const isCurrentChunk = index === currentChunkIndex && (isSpeaking || isPaused);
 
-        htmlContent += `<span class="text-chunk ${isCurrentChunk ? 'highlight' : ''}" data-index="${index}">${chunkHtml}</span>`;
-    });
+    for (let i = startIndex; i < endIndex; i++) {
+        let chunkHtml = file.chunks[i].replace(/\n/g, '<br>');
+        const isCurrentChunk = i === currentChunkIndex && (isSpeaking || isPaused);
+        htmlContent += `<span class="text-chunk ${isCurrentChunk ? 'highlight' : ''}" data-index="${i}">${chunkHtml}</span>`;
+    }
 
     $textViewer.innerHTML = htmlContent;
-    renderFileList();
 
     if (isSpeaking || isPaused) {
-         setTimeout(scrollToCurrentChunk, 100);
+        setTimeout(scrollToCurrentChunk, 100);
     }
 }
 
@@ -711,14 +698,13 @@ function scrollToCurrentChunk() {
     }
 }
 
-
 function setupTextViewerClickEvent() {
     $textViewer.addEventListener('click', (e) => {
         const chunkElement = e.target.closest('.text-chunk');
         if (!chunkElement) return;
-        
+
         if (chunkElement.classList.contains('highlight')) {
-            return; 
+            return;
         }
 
         const newChunkIndex = parseInt(chunkElement.dataset.index);
@@ -732,16 +718,15 @@ function jumpToChunk(index) {
     if (currentFileIndex === -1 || index >= filesData[currentFileIndex].chunks.length) return;
 
     synth.cancel();
-
     currentChunkIndex = index;
     isSpeaking = true;
     isPaused = false;
     $playPauseBtn.textContent = '⏸️';
 
-    renderTextViewer(currentFileIndex);
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
+    requestWakeLock();
     speakNextChunk();
 }
-
 
 function renderFileList() {
     $fileList.innerHTML = '';
@@ -752,12 +737,12 @@ function renderFileList() {
         const fileNameSpan = document.createElement('span');
         fileNameSpan.textContent = file.name;
         fileNameSpan.classList.add('file-item-name');
-        
+
         const controlsDiv = document.createElement('div');
         controlsDiv.classList.add('file-controls');
 
         const dragHandle = document.createElement('button');
-        dragHandle.innerHTML = '☰'; 
+        dragHandle.innerHTML = '☰';
         dragHandle.classList.add('drag-handle');
         dragHandle.title = '순서 변경';
 
@@ -765,38 +750,37 @@ function renderFileList() {
         deleteBtn.innerHTML = 'X';
         deleteBtn.classList.add('delete-file-btn');
         deleteBtn.title = '파일 삭제';
-        
-        // 처리 완료 상태 표시
+
         if (!file.isProcessed) {
             const statusSpan = document.createElement('span');
             statusSpan.textContent = ' (⏳ 대기)';
             statusSpan.style.color = '#FFD700';
             fileNameSpan.appendChild(statusSpan);
         }
-        
+
         controlsDiv.appendChild(dragHandle);
         controlsDiv.appendChild(deleteBtn);
-        
+
         li.appendChild(fileNameSpan);
         li.appendChild(controlsDiv);
-        
+
         li.classList.toggle('active', index === currentFileIndex);
-        
+
         $fileList.appendChild(li);
     });
 }
 
 function saveBookmark() {
     if (currentFileIndex === -1) return;
-    
+
     const bookmarkData = {
         fileId: filesData[currentFileIndex].id,
-        fileName: filesData[currentFileIndex].name, 
+        fileName: filesData[currentFileIndex].name,
         chunkIndex: currentChunkIndex,
-        isSequential: isSequential, 
-        settings: { 
-            voice: $voiceSelect.value, 
-            rate: $rateSlider.value 
+        isSequential: isSequential,
+        settings: {
+            voice: $voiceSelect.value,
+            rate: $rateSlider.value
         }
     };
     localStorage.setItem('autumnReaderBookmark', JSON.stringify(bookmarkData));
@@ -807,12 +791,11 @@ function loadBookmark() {
     if (!data) return;
 
     const bookmark = JSON.parse(data);
-    
     if (bookmark.settings) {
-         $rateSlider.value = bookmark.settings.rate;
-         updateRateDisplay();
+        $rateSlider.value = bookmark.settings.rate;
+        updateRateDisplay();
     }
-    
+
     isSequential = bookmark.isSequential !== undefined ? bookmark.isSequential : true;
     if ($sequentialReadCheckbox) {
         $sequentialReadCheckbox.checked = isSequential;
