@@ -9,6 +9,7 @@ let currentFileIndex = -1;
 let currentChunkIndex = 0;
 let isSequential = true; // 정주행 기능 상태 (기본값: true)
 let wakeLock = null; // Wake Lock 객체
+let noSleep = null; // NoSleep.js 객체
 
 // Web Speech API 객체
 const synth = window.speechSynthesis;
@@ -92,10 +93,12 @@ async function handleVisibilityChange() {
         if (isSpeaking && !isPaused) {
             synth.pause();
             isPaused = true;
+            console.log('화면 잠금: 재생 일시정지');
         }
     } else if (document.visibilityState === 'visible' && isSpeaking && isPaused) {
         synth.resume();
         isPaused = false;
+        console.log('화면 복귀: 재생 재개');
         if (isSpeaking) {
             await requestWakeLock();
         }
@@ -110,7 +113,7 @@ window.addEventListener('beforeunload', () => {
     releaseWakeLock();
 });
 
-// --- Wake Lock API ---
+// --- Wake Lock API 및 NoSleep.js ---
 async function requestWakeLock() {
     if ('wakeLock' in navigator) {
         try {
@@ -121,9 +124,19 @@ async function requestWakeLock() {
             console.log('Wake Lock requested.');
         } catch (err) {
             console.warn(`Wake Lock request failed: ${err.name}, ${err.message}`);
+            // Safari 대체
+            if (typeof NoSleep !== 'undefined') {
+                noSleep = new NoSleep();
+                noSleep.enable();
+                console.log('NoSleep enabled for screen wake.');
+            }
         }
+    } else if (typeof NoSleep !== 'undefined') {
+        noSleep = new NoSleep();
+        noSleep.enable();
+        console.log('NoSleep enabled for screen wake.');
     } else {
-        console.warn('Wake Lock API is not supported in this browser.');
+        console.warn('Wake Lock API and NoSleep.js are not supported.');
     }
 }
 
@@ -135,6 +148,11 @@ function releaseWakeLock() {
         }).catch((err) => {
             console.error(`Wake Lock release failed: ${err.name}, ${err.message}`);
         });
+    }
+    if (noSleep) {
+        noSleep.disable();
+        noSleep = null;
+        console.log('NoSleep disabled.');
     }
 }
 

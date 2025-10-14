@@ -1,324 +1,180 @@
-/* 기본 리셋 및 폰트 설정 */
 body {
     font-family: Arial, sans-serif;
+    background-color: #2c2c2c;
+    color: #e0e0e0;
     margin: 0;
-    padding: 0;
-    /* 다크 모드 배경색 설정 */
-    background-color: #1a1a1a; 
-    color: #e0e0e0; /* 기본 텍스트 색상 밝게 */
+    padding: 20px;
+    overflow-x: hidden;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
 }
 
 header {
-    padding: 10px 20px;
-    background-color: #333333; /* 헤더 배경을 어둡게 */
-    color: #ffffff;
-    text-align: center;
-}
-
-/* 1. 좌우 분할 레이아웃 (PC 버전) */
-.app-container {
-    display: flex;
-    height: calc(100vh - 50px); /* 헤더 높이 제외 */
-}
-
-.file-panel {
-    flex: 0 0 300px; /* 파일 목록 패널 고정 너비 */
-    padding: 20px;
-    /* 패널 배경을 어둡게 */
-    background-color: #242424; 
-    border-right: 1px solid #444; /* 구분선도 어둡게 */
-    overflow-y: auto;
-}
-
-.reader-panel {
-    flex-grow: 1; /* 남은 공간 모두 사용 */
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-}
-
-h1, h2, h3 {
-    color: #ffffff;
-}
-
-/* 2. Reader Panel 컨트롤 바 (수정) */
-.top-controls-bar {
-    display: flex;
-    flex-wrap: wrap; /* 공간 부족 시 다음 줄로 */
-    gap: 15px; 
-    padding: 10px 0;
-    align-items: center;
-    border-bottom: 1px solid #444;
-    margin-bottom: 10px;
-}
-
-/* 개별 컨트롤 그룹 스타일 */
-.controls-playback,
-.controls-rate,
-.controls-voice {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 5px;
-}
-
-.controls-playback button {
-    padding: 10px 12px;
-    font-size: 1.1em;
-    background-color: #00796b;
-    color: white;
-    border: none;
-    border-radius: 50%; /* 재생 버튼 둥글게 */
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-.controls-playback button:hover {
-    background-color: #00897b;
-}
-
-/* 속도 슬라이더 너비 조정 (가로 스크롤 방지 핵심) */
-.controls-rate input[type="range"] {
-    width: 100px; 
-    min-width: 80px; 
-}
-
-.controls-voice select {
-    padding: 8px;
-    background-color: #333;
-    color: #fff;
-    border: 1px solid #555;
-    border-radius: 4px;
-}
-
-
-/* 3. 텍스트 뷰어 */
-.text-viewer {
-    flex-grow: 1;
-    line-height: 1.8;
-    font-size: 1.1em;
-    overflow-y: auto;
-}
-
-.text-viewer p {
-    margin: 0;
-}
-
-.text-chunk {
-    transition: background-color 0.1s;
-    cursor: pointer; /* 청크 클릭으로 위치 이동 가능 */
-}
-
-.highlight {
-    background-color: #555500; /* 읽고 있는 청크 하이라이트 */
-    color: #fff;
-    padding: 2px 0;
-    border-radius: 2px;
-}
-
-/* 4. 드래그 앤 드롭 영역 */
-.drop-area {
-    border: 2px dashed #00796b;
-    padding: 20px;
     text-align: center;
     margin-bottom: 20px;
-    background-color: #2c2c2c;
-    border-radius: 8px;
-    cursor: pointer;
 }
 
-.drop-area.active {
+h1 {
+    color: #FFD700;
+}
+
+.upload-section, .control-section, .file-list-section, .text-viewer-section {
+    margin-bottom: 20px;
+}
+
+#drop-area {
+    border: 2px dashed #666;
+    padding: 20px;
+    text-align: center;
     background-color: #3a3a3a;
-    border-color: #00a08d;
+    cursor: pointer;
 }
 
-/* 5. 클립보드 & URL 입력 영역 스타일 */
-.clipboard-input-area, .url-input-area {
-    margin-bottom: 20px;
-    padding: 15px;
-    border: 1px solid #444;
-    background-color: #1f1f1f;
-    border-radius: 8px;
+#drop-area.active {
+    background-color: #4a4a4a;
 }
 
-#clipboard-text-input, #url-text-input {
+#file-upload-btn, #load-url-btn, #load-clipboard-btn, #clear-all-files-btn {
+    background-color: #FFD700;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    margin-top: 10px;
+    border-radius: 5px;
+}
+
+#file-upload-btn:hover, #load-url-btn:hover, #load-clipboard-btn:hover, #clear-all-files-btn:hover {
+    background-color: #FFC107;
+}
+
+#url-text-input, #clipboard-text-input {
     width: 100%;
-    box-sizing: border-box;
     padding: 10px;
-    margin-bottom: 10px;
-    background-color: #333;
-    color: #fff;
-    border: 1px solid #555;
-    border-radius: 4px;
+    margin-top: 10px;
+    background-color: #4a4a4a;
+    border: 1px solid #666;
+    color: #e0e0e0;
+    border-radius: 5px;
+}
+
+#clipboard-text-input {
+    height: 100px;
     resize: vertical;
 }
 
-#load-clipboard-btn, #load-url-btn, #file-upload-btn {
-    width: 100%;
+.control-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#voice-select, #rate-slider {
+    padding: 5px;
+    background-color: #4a4a4a;
+    border: 1px solid #666;
+    color: #e0e0e0;
+}
+
+#play-pause-btn, #stop-btn, #prev-file-btn, #next-file-btn {
+    background-color: #FFD700;
+    border: none;
     padding: 10px;
     cursor: pointer;
-    background-color: #00796b;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    font-weight: bold;
-}
-#load-clipboard-btn:hover, #load-url-btn:hover, #file-upload-btn:hover {
-    background-color: #00897b;
+    border-radius: 5px;
 }
 
+#play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover {
+    background-color: #FFC107;
+}
 
-/* 6. 파일 목록 컨트롤 (정주행 체크박스 및 전체 삭제) */
-.file-list-controls {
+#file-list {
+    list-style: none;
+    padding: 0;
+}
+
+#file-list li {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 0;
-    border-top: 1px solid #444;
-    margin-top: 10px;
-}
-
-.sequential-checkbox-label {
-    display: flex;
-    align-items: center;
-    font-size: 0.9em;
-}
-
-.sequential-checkbox-label input[type="checkbox"] {
-    margin-right: 5px;
-    transform: scale(1.1);
-}
-
-.clear-all-btn {
-    padding: 5px 10px;
-    background-color: #d32f2f; /* 빨간색 계열 */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8em;
-}
-
-.clear-all-btn:hover {
-    background-color: #e53935;
-}
-
-
-/* 7. 파일 목록 아이템 스타일 (수정: 삭제/순서 변경 버튼 공간 확보) */
-.file-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.file-list li {
-    display: flex;
-    justify-content: space-between; 
-    align-items: center;
-    padding: 8px 10px;
+    padding: 10px;
+    background-color: #3a3a3a;
     margin-bottom: 5px;
-    background-color: #333;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    border-radius: 5px;
     cursor: pointer;
 }
 
-.file-list li:hover {
-    background-color: #444;
+#file-list li.active {
+    background-color: #FFD700;
+    color: #2c2c2c;
 }
 
-.file-list li.active {
-    background-color: #005f54; /* 활성화된 파일 색상 */
-    border: 1px solid #00a08d;
-}
-
-.file-item-name {
-    flex-grow: 1; 
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    padding-right: 10px;
+#file-list li:hover {
+    background-color: #4a4a4a;
 }
 
 .file-controls {
     display: flex;
-    align-items: center;
-    gap: 5px; 
+    gap: 5px;
 }
 
-.delete-file-btn, .drag-handle {
-    background: none;
+.drag-handle, .delete-file-btn {
+    background-color: #666;
     border: none;
+    padding: 5px 10px;
     cursor: pointer;
-    color: #e0e0e0;
-    font-size: 1.1em;
-    padding: 0 5px;
-    line-height: 1;
+    border-radius: 3px;
 }
 
 .delete-file-btn:hover {
-    color: #ff5252;
+    background-color: #ff4444;
 }
 
-/* 햄버거 버튼 스타일 (드래그 핸들) */
-.drag-handle {
-    cursor: grab;
+.drag-handle:hover {
+    background-color: #888;
 }
 
-
-/* 8. 모바일 반응형 디자인 (420px 이하) */
-@media (max-width: 768px) {
-    .app-container {
-        flex-direction: column;
-        height: auto;
-    }
-
-    .file-panel {
-        flex: 0 0 auto;
-        border-right: none;
-        border-bottom: 1px solid #444;
-        max-height: 45vh; /* 모바일에서 목록 높이 제한 */
-    }
-
-    .reader-panel {
-        max-height: 55vh;
-        overflow-y: auto;
-    }
+#text-viewer {
+    background-color: #3a3a3a;
+    padding: 20px;
+    border-radius: 5px;
+    max-height: 400px;
+    overflow-y: auto;
 }
 
-@media (max-width: 420px) {
-    /* 파일 목록 패널 (높이 제한 유지) */
-    .file-panel {
+.text-chunk {
+    display: block;
+    margin-bottom: 10px;
+    cursor: pointer;
+}
+
+.text-chunk:hover {
+    background-color: #4a4a4a;
+}
+
+.text-chunk.highlight {
+    background-color: #FFD700;
+    color: #2c2c2c;
+}
+
+@media (max-width: 600px) {
+    .container {
         padding: 10px;
     }
-    
-    /* 컨트롤 바 조정: 가로 스크롤 방지 핵심 */
-    .top-controls-bar {
-        flex-wrap: wrap; 
-        justify-content: space-around;
-        gap: 10px; 
-        padding: 5px 0;
-    }
-    
-    .controls-playback {
-        flex-basis: 100%; /* 재생 버튼 그룹을 한 줄에 배치 */
-        justify-content: space-around;
+
+    .control-section {
+        flex-direction: column;
+        align-items: stretch;
     }
 
-    .controls-rate {
-        flex-grow: 1; 
-        min-width: 120px; 
-        justify-content: center;
+    #file-upload-btn, #load-url-btn, #load-clipboard-btn, #clear-all-files-btn {
+        width: 100%;
     }
-    
-    .controls-voice {
-        flex-grow: 1;
-        min-width: 100px;
-        justify-content: center;
-    }
-    
-    .controls-rate input[type="range"] {
-        width: 60px; /* 모바일 환경에서 슬라이더 너비를 더 줄임 */
+
+    #url-text-input, #clipboard-text-input {
+        width: 100%;
     }
 }
