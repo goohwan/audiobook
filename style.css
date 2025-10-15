@@ -8,24 +8,31 @@ body {
 }
 
 .container {    
-    width:100%;
-    min-width:420px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 20px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
-#left_pennel {   
-    float:left;
-    border:solid 1px #4a4a4a;
-    min-width:420px;
+#left_pannel {   
+    flex: 1 1 400px;
+    border: solid 2px #4a4a4a;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
-#right_pennel {   
-    float:left;
-    border:solid 1px #4a4a4a;
-    min-width:420px;
+#right_pannel {   
+    flex: 1 1 400px;
+    border: solid 1px #4a4a4a;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
 div#disqus_thread iframe[sandbox] {
-max-height: 0px !important;
+    max-height: 0px !important;
 }
 
 header {
@@ -176,22 +183,14 @@ h1 {
     color: #2c2c2c;
 }
 
-
-@media (max-width: 600px) {
+@media (max-width: 450px) {
     .container {
-        padding: 10px;
-    }
-
-    .control-section {
         flex-direction: column;
-        align-items: stretch;
+        gap: 10px;
     }
 
-    #file-upload-btn, #load-url-btn, #load-clipboard-btn, #clear-all-files-btn {
-        width: 100%;
-    }
-
-    #url-text-input, #clipboard-text-input {
-        width: 100%;
+    #left_pannel, #right_pannel {
+        flex-basis: 100%;
+        min-width: auto;
     }
 }
