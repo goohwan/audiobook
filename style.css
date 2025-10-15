@@ -15,7 +15,7 @@ body {
 
 #right_pennel {
     position:fixed;
-    display:flex;
+    float:right;
     border:solid 1px #4a4a4a;
     width:50%;
 }
