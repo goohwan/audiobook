@@ -7,9 +7,13 @@ body {
     overflow-x: hidden;
 }
 
-.container {
-    max-width: 800px;
-    width:45%;
+.container {    
+    width:100%;
+}
+
+#left_pennel {   
+    border:solid 1px #4a4a4a;
+    width:50%;
 }
 
 #right_pennel {   
