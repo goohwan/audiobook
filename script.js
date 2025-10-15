@@ -1,12 +1,12 @@
 // --- 전역 변수 설정 ---
 const MAX_FILES = 50; // 파일 첨부 최대 개수 50개
 const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수
-const PRELOAD_NEXT_CHUNKS = 2; // 미리 큐잉할 다음 청크 수
 const VISIBLE_CHUNKS = 10; // 가상화: 한 번에 렌더링할 청크 수
 
 let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
+let currentCharIndex = 0; // 청크 내 현재 문자 위치
 let isSequential = true; // 정주행 기능 상태 (기본값: true)
 let wakeLock = null; // Wake Lock 객체
 let noSleep = null; // NoSleep.js 객체
@@ -16,6 +16,7 @@ const synth = window.speechSynthesis;
 let currentUtterance = null; // 현재 발화 중인 SpeechSynthesisUtterance 객체
 let isPaused = false;
 let isSpeaking = false;
+let isMobile = /Android/i.test(navigator.userAgent); // 모바일 감지
 
 // DOM 요소 캐시
 const $ = (selector) => document.querySelector(selector);
@@ -91,12 +92,20 @@ document.addEventListener('DOMContentLoaded', () => {
 async function handleVisibilityChange() {
     if (document.visibilityState === 'hidden') {
         if (isSpeaking && !isPaused) {
-            synth.pause();
+            if (isMobile) {
+                synth.cancel(); // 모바일에서 pause 대신 cancel
+            } else {
+                synth.pause();
+            }
             isPaused = true;
             console.log('화면 잠금: 재생 일시정지');
         }
     } else if (document.visibilityState === 'visible' && isSpeaking && isPaused) {
-        synth.resume();
+        if (isMobile) {
+            speakNextChunk(); // 모바일에서 resume 대신 재시작
+        } else {
+            synth.resume();
+        }
         isPaused = false;
         console.log('화면 복귀: 재생 재개');
         if (isSpeaking) {
@@ -321,7 +330,7 @@ function handleFiles(event) {
     let chunkIndexForResume = JSON.parse(bookmarkData)?.chunkIndex || 0;
     let newFileIndexForResume = -1;
 
-    const filePromises = newFiles.map(file => {
+    const filePromises = filePromises = newFiles.map(file => {
         return (async () => {
             let content = '';
             try {
@@ -462,6 +471,7 @@ async function startReadingFromCurrentChunk() {
     }
 
     currentChunkIndex = Math.min(currentChunkIndex, file.chunks.length - 1);
+    currentCharIndex = 0; // 위치 초기화
     isSpeaking = true;
     isPaused = false;
     $playPauseBtn.textContent = '⏸️';
@@ -485,42 +495,27 @@ function speakNextChunk() {
         return;
     }
 
-    const textToSpeak = file.chunks[currentChunkIndex];
+    let textToSpeak = file.chunks[currentChunkIndex].slice(currentCharIndex);
     currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
     currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value);
     currentUtterance.rate = parseFloat($rateSlider.value);
     currentUtterance.pitch = 1;
 
     currentUtterance.onend = () => {
+        currentCharIndex = 0;
         currentChunkIndex++;
         saveBookmark();
         requestAnimationFrame(() => renderTextViewer(currentFileIndex));
-        setTimeout(speakNextChunk, 50);
+        speakNextChunk();
     };
 
-    currentUtterance.onpause = () => {
-        isPaused = true;
+    currentUtterance.onboundary = (event) => {
+        if (event.name === 'word') {
+            currentCharIndex = event.charIndex;
+        }
     };
 
     synth.speak(currentUtterance);
-
-    // 다음 2개 청크 미리 큐잉
-    for (let i = 1; i <= PRELOAD_NEXT_CHUNKS; i++) {
-        const nextIndex = currentChunkIndex + i;
-        if (nextIndex < file.chunks.length) {
-            const nextUtterance = new SpeechSynthesisUtterance(file.chunks[nextIndex]);
-            nextUtterance.voice = currentUtterance.voice;
-            nextUtterance.rate = currentUtterance.rate;
-            nextUtterance.pitch = currentUtterance.pitch;
-            nextUtterance.onend = () => {
-                currentChunkIndex = nextIndex + 1;
-                saveBookmark();
-                requestAnimationFrame(() => renderTextViewer(currentFileIndex));
-                setTimeout(speakNextChunk, 50);
-            };
-            synth.speak(nextUtterance);
-        }
-    }
 }
 
 function togglePlayPause() {
@@ -530,12 +525,20 @@ function togglePlayPause() {
     }
 
     if (isSpeaking && !isPaused) {
-        synth.pause();
+        if (isMobile) {
+            synth.cancel(); // 모바일에서 pause 대신 cancel
+        } else {
+            synth.pause();
+        }
         isPaused = true;
         $playPauseBtn.textContent = '▶️';
         releaseWakeLock();
     } else if (isSpeaking && isPaused) {
-        synth.resume();
+        if (isMobile) {
+            speakNextChunk(); // 모바일에서 resume 대신 재시작 (위치 유지)
+        } else {
+            synth.resume();
+        }
         isPaused = false;
         $playPauseBtn.textContent = '⏸️';
         requestWakeLock();
@@ -549,6 +552,7 @@ function stopReading() {
     isSpeaking = false;
     isPaused = false;
     currentChunkIndex = 0;
+    currentCharIndex = 0;
     $playPauseBtn.textContent = '▶️';
     releaseWakeLock();
     if (currentFileIndex !== -1) {
@@ -568,6 +572,7 @@ function changeFile(newIndex) {
     synth.cancel();
     currentFileIndex = newIndex;
     currentChunkIndex = 0;
+    currentCharIndex = 0;
 
     if (!filesData[newIndex].isProcessed) {
         processFileChunks(newIndex, true);
@@ -604,6 +609,7 @@ function handleFileListItemClick(e) {
 
     currentFileIndex = fileIndex;
     currentChunkIndex = 0;
+    currentCharIndex = 0;
 
     if (!filesData[currentFileIndex].isProcessed) {
         processFileChunks(currentFileIndex, true);
@@ -625,6 +631,7 @@ function deleteFile(index) {
         stopReading();
         currentFileIndex = filesData.length > 0 ? 0 : -1;
         currentChunkIndex = 0;
+        currentCharIndex = 0;
         requestAnimationFrame(() => renderTextViewer(currentFileIndex));
     } else if (index < currentFileIndex) {
         currentFileIndex--;
@@ -647,6 +654,7 @@ function clearAllFiles() {
     filesData = [];
     currentFileIndex = -1;
     currentChunkIndex = 0;
+    currentCharIndex = 0;
     localStorage.removeItem('autumnReaderBookmark');
     requestAnimationFrame(renderFileList);
     $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
@@ -739,6 +747,7 @@ function jumpToChunk(index) {
 
     synth.cancel();
     currentChunkIndex = index;
+    currentCharIndex = 0;
     isSpeaking = true;
     isPaused = false;
     $playPauseBtn.textContent = '⏸️';
