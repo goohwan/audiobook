@@ -16,7 +16,7 @@ const synth = window.speechSynthesis;
 let currentUtterance = null; // 현재 발화 중인 SpeechSynthesisUtterance 객체
 let isPaused = false;
 let isSpeaking = false;
-let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent); // 모바일 감지
+let isMobile = /Android/i.test(navigator.userAgent); // 모바일 감지
 
 // DOM 요소 캐시
 const $ = (selector) => document.querySelector(selector);
@@ -50,10 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     synth.onvoiceschanged = populateVoiceList;
 
     $fileInput.addEventListener('change', handleFiles);
-    $('#file-upload-btn').addEventListener('click', () => {
-        console.log('File upload button clicked');
-        $fileInput.click();
-    });
+    $('#file-upload-btn').addEventListener('click', () => $fileInput.click());
 
     setupDragAndDrop();
 
@@ -136,6 +133,7 @@ async function requestWakeLock() {
             console.log('Wake Lock requested.');
         } catch (err) {
             console.warn(`Wake Lock request failed: ${err.name}, ${err.message}`);
+            // Safari 대체
             if (typeof NoSleep !== 'undefined') {
                 noSleep = new NoSleep();
                 noSleep.enable();
@@ -246,6 +244,7 @@ async function fetchAndProcessUrlContent(url) {
         const novelContentElement = doc.getElementById('novel_content') || doc.getElementById('bo_v_con');
         let text = '';
         if (novelContentElement) {
+            // 여러 <p> 태그의 텍스트 추출
             const pTags = novelContentElement.querySelectorAll('p');
             text = Array.from(pTags).map(p => p.textContent.trim()).join('\n');
             text = text.trim();
@@ -316,14 +315,12 @@ function handleClipboardText() {
 }
 
 function handleFiles(event) {
-    console.log('handleFiles triggered:', event.target.files);
     const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
     if (filesData.length + newFiles.length > MAX_FILES) {
         alert(`최대 ${MAX_FILES}개 파일만 첨부할 수 있습니다.`);
         newFiles.splice(MAX_FILES - filesData.length);
     }
     if (newFiles.length === 0) {
-        console.log('No valid .txt files selected');
         event.target.value = '';
         return;
     }
@@ -333,9 +330,8 @@ function handleFiles(event) {
     let chunkIndexForResume = JSON.parse(bookmarkData)?.chunkIndex || 0;
     let newFileIndexForResume = -1;
 
-    const filePromises = newFiles.map(file => {
+    const filePromises = filePromises = newFiles.map(file => {
         return (async () => {
-            console.log(`Reading file: ${file.name}`);
             let content = '';
             try {
                 content = await readTextFile(file, 'UTF-8');
@@ -437,23 +433,16 @@ function processFileChunks(fileIndex, startReading) {
 }
 
 function setupDragAndDrop() {
-    console.log('Setting up drag and drop');
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         $dropArea.addEventListener(eventName, preventDefaults, false);
     });
 
     ['dragenter', 'dragover'].forEach(eventName => {
-        $dropArea.addEventListener(eventName, () => {
-            console.log('Drag event:', eventName);
-            $dropArea.classList.add('active');
-        }, false);
+        $dropArea.addEventListener(eventName, () => $dropArea.classList.add('active'), false);
     });
 
     ['dragleave', 'drop'].forEach(eventName => {
-        $dropArea.addEventListener(eventName, () => {
-            console.log('Drag event:', eventName);
-            $dropArea.classList.remove('active');
-        }, false);
+        $dropArea.addEventListener(eventName, () => $dropArea.classList.remove('active'), false);
     });
 
     $dropArea.addEventListener('drop', handleDrop, false);
@@ -464,7 +453,6 @@ function setupDragAndDrop() {
     }
 
     function handleDrop(e) {
-        console.log('File dropped:', e.dataTransfer.files);
         const dt = e.dataTransfer;
         $fileInput.files = dt.files;
         handleFiles({ target: $fileInput });
@@ -713,6 +701,7 @@ function renderTextViewer(fileIndex) {
         return;
     }
 
+    // 가상화: 현재 청크 주변만 렌더링
     const startIndex = Math.max(0, currentChunkIndex - Math.floor(VISIBLE_CHUNKS / 2));
     const endIndex = Math.min(file.chunks.length, startIndex + VISIBLE_CHUNKS);
     let htmlContent = '';

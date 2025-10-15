@@ -19,18 +19,20 @@ body {
 
 #left_pannel {   
     flex: 1 1 400px;
+    border: solid 2px #4a4a4a;
     padding: 20px;
     box-sizing: border-box;
 }
 
 #right_pannel {   
-    flex: 1 1 400px;    
+    flex: 1 1 400px;
+    border: solid 1px #4a4a4a;
     padding: 20px;
     box-sizing: border-box;
 }
 
-#disqus_thread {
-    min-height: 200px; /* Disqus 영역 최소 높이 */
+div#disqus_thread iframe[sandbox] {
+    max-height: 0px !important;
 }
 
 header {
@@ -52,9 +54,6 @@ h1 {
     text-align: center;
     background-color: #3a3a3a;
     cursor: pointer;
-    position: relative;
-    z-index: 10; /* 이벤트 차단 방지 */
-    pointer-events: auto;
 }
 
 #drop-area.active {
@@ -68,9 +67,6 @@ h1 {
     cursor: pointer;
     margin-top: 10px;
     border-radius: 5px;
-    position: relative;
-    z-index: 10; /* 이벤트 차단 방지 */
-    pointer-events: auto;
 }
 
 #file-upload-btn:hover, #load-url-btn:hover, #load-clipboard-btn:hover, #clear-all-files-btn:hover {
