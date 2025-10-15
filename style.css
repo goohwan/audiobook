@@ -160,6 +160,14 @@ h1 {
     color: #2c2c2c;
 }
 
+#right_pennel {
+    display:flex;
+}
+
+div#disqus_thread iframe[sandbox] {
+max-height: 0px !important;
+}
+
 @media (max-width: 600px) {
     .container {
         padding: 10px;
