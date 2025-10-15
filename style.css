@@ -13,6 +13,17 @@ body {
     display:flex;
 }
 
+#right_pennel {
+    position:fixed;
+    display:flex;
+    border:solid 1px #4a4a4a;
+    width:50%;
+}
+
+div#disqus_thread iframe[sandbox] {
+max-height: 0px !important;
+}
+
 header {
     text-align: center;
     margin-bottom: 20px;
@@ -161,16 +172,6 @@ h1 {
     color: #2c2c2c;
 }
 
-#right_pennel {
-    position:fixed;
-    border:solid 1px #4a4a4a;
-    float:right;
-    width:50%;
-}
-
-div#disqus_thread iframe[sandbox] {
-max-height: 0px !important;
-}
 
 @media (max-width: 600px) {
     .container {
