@@ -161,7 +161,8 @@ h1 {
 }
 
 #right_pennel {
-    display:flex;
+    position:fixed;
+    border:solid 1px #4a4a4a;
     float:right;
     width:50%;
 }
