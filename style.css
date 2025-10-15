@@ -162,6 +162,8 @@ h1 {
 
 #right_pennel {
     display:flex;
+    float:right;
+    width:50%;
 }
 
 div#disqus_thread iframe[sandbox] {
