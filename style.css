@@ -9,15 +9,14 @@ body {
 
 .container {
     max-width: 800px;
-    width:50%;
+    width:45%;
     margin: 0 auto;
 }
 
-#right_pennel {
-    position:fixed;
+#right_pennel {   
     float:right;
     border:solid 1px #4a4a4a;
-    width:50%;
+    width:45%;
 }
 
 div#disqus_thread iframe[sandbox] {
