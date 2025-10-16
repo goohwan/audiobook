@@ -18,13 +18,13 @@ body {
 }
 
 #left_pannel {   
-    flex: 1 1 300px;
+    flex: 1 1 500px;
     padding: 20px;
     box-sizing: border-box;
 }
 
 #right_pannel {   
-    flex: 1 1 400px;    
+    flex: 1 1 300px;    
     padding: 20px;
     box-sizing: border-box;
 }
