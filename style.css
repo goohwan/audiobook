@@ -34,7 +34,7 @@ h1 {
     color: #FFD700;
 }
 
-.file-list-section, .text-viewer-section, .control-section, .disqus-section, .web-page-section {
+.file-list-section, .text-viewer-section, .control-section, .disqus-section {
     margin-bottom: 20px;
 }
 
@@ -78,26 +78,23 @@ h1 {
     color: #e0e0e0;
 }
 
-.playback-controls button, #clear-all-files-btn, #load-web-page {
+.playback-controls button, #clear-all-files-btn {
     background-color: #FFD700;
     border: none;
     padding: 10px;
     cursor: pointer;
+}
+
+.playback-controls button {
+    border-radius: 0;
+}
+
+#clear-all-files-btn {
     border-radius: 5px;
 }
 
-#play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover, #clear-all-files-btn:hover, #load-web-page:hover {
+#play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover, #clear-all-files-btn:hover {
     background-color: #FFC107;
-}
-
-#web-page-url {
-    padding: 10px;
-    width: calc(100% - 22px);
-    background-color: #3a3a3a;
-    border: 1px solid #666;
-    color: #e0e0e0;
-    border-radius: 5px;
-    margin-bottom: 10px;
 }
 
 #file-list {
