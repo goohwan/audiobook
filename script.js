@@ -194,7 +194,7 @@ function readTextFile(file, encoding) {
             resolve(content);
         };
         reader.onerror = (e) => reject(new Error(`파일 읽기 오류: ${e.target.error.name}`));
-        reader.readAsArrayBuffer(file); // ArrayBuffer로 읽어 인코딩 확인 가능
+        reader.readAsArrayBuffer(file);
     });
 }
 
@@ -410,7 +410,7 @@ async function handleFiles(event) {
         return {
             id: fileId,
             name: file.name,
-            fullText: content,
+            fullText: content || '', // null 방지
             chunks: [],
             isProcessed: false
         };
@@ -454,8 +454,20 @@ function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || file.isProcessed) return;
 
-    const text = file.fullText || '';
-    const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^\s]+/g) || [text];
+    const text = file.fullText || ''; // text가 undefined일 경우 빈 문자열로 대체
+    if (!text) {
+        file.isProcessed = true;
+        file.chunks = [''];
+        console.warn(`파일 "${file.name}"의 텍스트가 비어 있습니다.`);
+        if (startReading && currentFileIndex === fileIndex) {
+            renderTextViewer(fileIndex);
+            startReadingFromCurrentChunk();
+        }
+        renderFileList();
+        return;
+    }
+
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^\s]+/g) || [text]; // null 방지
     let currentChunk = '';
 
     sentences.forEach((sentence, index) => {
@@ -481,6 +493,7 @@ function processFileChunks(fileIndex, startReading) {
     }
 
     file.isProcessed = true;
+    console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
 
     if (startReading && currentFileIndex === fileIndex) {
         renderTextViewer(fileIndex);
@@ -547,12 +560,13 @@ function setupFullScreenDragAndDrop() {
 
 // --- 재생 컨트롤 ---
 async function startReadingFromCurrentChunk() {
-    if (currentFileIndex === -1) return;
+    if (currentFileIndex === -1 || !filesData[currentFileIndex]) return;
 
     const file = filesData[currentFileIndex];
-    if (!file || !file.isProcessed || file.chunks.length === 0) {
-        console.log(`재생 시작 실패 - 파일: ${file?.name}, 상태: ${file?.isProcessed}, 청크 수: ${file?.chunks?.length}`);
-        alert("재생할 수 있는 텍스트가 없습니다. 파일을 확인해주세요.");
+    if (!file.isProcessed || file.chunks.length === 0) {
+        console.log(`재생 시작 실패 - 파일: ${file.name}, 상태: ${file.isProcessed}, 청크 수: ${file.chunks.length}`);
+        alert("재생할 수 있는 텍스트가 없습니다. 파일을 확인하거나 처리 완료를 기다려 주세요.");
+        if (!file.isProcessed) processFileChunks(currentFileIndex, true);
         return;
     }
 
@@ -589,7 +603,7 @@ function speakNextChunk() {
     }
 
     currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
-    currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value);
+    currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value) || synth.getVoices()[0]; // 기본 음성 fallback
     currentUtterance.rate = parseFloat($rateSlider.value);
     currentUtterance.pitch = 1;
 
@@ -611,14 +625,14 @@ function speakNextChunk() {
         synth.speak(currentUtterance);
     } catch (error) {
         console.error('음성 합성 오류:', error);
-        alert('음성 재생 중 오류가 발생했습니다. 브라우저 설정을 확인해주세요.');
+        alert('음성 재생 중 오류가 발생했습니다. 브라우저 설정을 확인해 주세요.');
         stopReading();
     }
 }
 
 function togglePlayPause() {
     if (currentFileIndex === -1) {
-        alert("재생할 파일을 선택해주세요.");
+        alert("재생할 파일을 선택해 주세요.");
         return;
     }
 
@@ -777,7 +791,7 @@ function setupFileListSortable() {
     });
 }
 
-// --- UI 렌der링 ---
+// --- UI 렌더링 ---
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
         $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
