@@ -548,36 +548,57 @@ function isUTF8(str) {
     }
 }
 
-// --- 청크 처리 ---
+// --- 청크 처리 (수정) ---
 function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || file.isProcessed) return;
 
-    const text = file.fullText;
-    const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
-    let currentChunk = '';
+    const text = file.fullText || ''; // 텍스트가 없으면 빈 문자열로 초기화
+    console.log(`청크 처리 시작 - 파일: ${file.name}, 텍스트 길이: ${text.length}`);
 
-    sentences.forEach(sentence => {
-        if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
+    try {
+        // 문장 분할 로직 개선
+        const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^\s]+/g) || [text]; // 문장 없으면 전체 텍스트 사용
+        let currentChunk = '';
+
+        sentences.forEach((sentence, index) => {
+            console.log(`문장 ${index + 1}: ${sentence.substring(0, 20)}... (길이: ${sentence.length})`);
+            if (!sentence) return; // 빈 문장 무시
+
+            const newChunk = currentChunk + sentence;
+            if (newChunk.length > CHUNK_SIZE_LIMIT) {
+                if (currentChunk) {
+                    file.chunks.push(currentChunk.trim());
+                }
+                currentChunk = sentence;
+            } else {
+                currentChunk = newChunk;
+            }
+        });
+
+        if (currentChunk.trim()) {
             file.chunks.push(currentChunk.trim());
-            currentChunk = sentence;
-        } else {
-            currentChunk += sentence;
         }
-    });
 
-    if (currentChunk.trim()) {
-        file.chunks.push(currentChunk.trim());
+        if (file.chunks.length === 0 && text.length > 0) {
+            file.chunks.push(text); // 최소한 하나의 청크 보장
+        }
+
+        file.isProcessed = true;
+        console.log(`청크 처리 완료 - 총 청크 수: ${file.chunks.length}`);
+
+        if (startReading && currentFileIndex === fileIndex) {
+            renderTextViewer(fileIndex);
+            startReadingFromCurrentChunk();
+        }
+
+        renderFileList();
+    } catch (error) {
+        console.error(`청크 처리 오류 - 파일: ${file.name}, 오류: ${error.message}`);
+        alert(`청크 처리 중 오류가 발생했습니다: ${error.message}`);
+        file.isProcessed = true; // 오류 시에도 처리가 끝난 것으로 표시
+        renderFileList();
     }
-
-    file.isProcessed = true;
-
-    if (startReading && currentFileIndex === fileIndex) {
-        renderTextViewer(fileIndex);
-        startReadingFromCurrentChunk();
-    }
-
-    renderFileList();
 }
 
 // --- 드래그 앤 드롭 ---
@@ -640,8 +661,9 @@ async function startReadingFromCurrentChunk() {
     if (currentFileIndex === -1) return;
 
     const file = filesData[currentFileIndex];
-    if (!file || !file.isProcessed) {
-        processFileChunks(currentFileIndex, true);
+    if (!file || !file.isProcessed || file.chunks.length === 0) {
+        console.log(`재생 시작 실패 - 파일: ${file?.name}, 상태: ${file?.isProcessed}, 청크 수: ${file?.chunks?.length}`);
+        alert("재생할 수 있는 텍스트가 없습니다. 파일을 확인해주세요.");
         return;
     }
 
@@ -659,7 +681,7 @@ async function startReadingFromCurrentChunk() {
 
 function speakNextChunk() {
     const file = filesData[currentFileIndex];
-    if (!isSpeaking || isPaused) return;
+    if (!isSpeaking || isPaused || !file || !file.chunks || file.chunks.length === 0) return;
 
     if (currentChunkIndex >= file.chunks.length) {
         if (isSequential) {
@@ -671,6 +693,12 @@ function speakNextChunk() {
     }
 
     let textToSpeak = file.chunks[currentChunkIndex].slice(currentCharIndex);
+    if (!textToSpeak) {
+        currentChunkIndex++;
+        speakNextChunk();
+        return;
+    }
+
     currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
     currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value);
     currentUtterance.rate = parseFloat($rateSlider.value);
@@ -690,7 +718,13 @@ function speakNextChunk() {
         }
     };
 
-    synth.speak(currentUtterance);
+    try {
+        synth.speak(currentUtterance);
+    } catch (error) {
+        console.error('음성 합성 오류:', error);
+        alert('음성 재생 중 오류가 발생했습니다. 브라우저 설정을 확인해주세요.');
+        stopReading();
+    }
 }
 
 function togglePlayPause() {
