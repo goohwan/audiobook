@@ -33,9 +33,6 @@ const $playPauseBtn = $('#play-pause-btn');
 // 추가된 DOM 요소
 const $sequentialReadCheckbox = $('#sequential-read-checkbox');
 const $clearAllFilesBtn = $('#clear-all-files-btn');
-// [추가] 모바일 전용 로드 버튼
-const $mobileLoadBtn = $('#mobile-load-btn');
-
 
 // 텍스트 뷰어 초기 안내문
 const INITIAL_TEXT_VIEWER_TEXT = '텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.';
@@ -73,10 +70,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 텍스트 뷰어에 포커스 되었을 때 안내문 자동 제거
     $textViewer.addEventListener('focus', clearInitialTextViewerContent);
 
-    // [추가] 모바일 전용 로드 버튼 이벤트 리스너
-    if ($mobileLoadBtn) {
-        $mobileLoadBtn.addEventListener('click', handleMobileLoadButtonClick);
-    }
 
     $sequentialReadCheckbox.addEventListener('change', (e) => {
         isSequential = e.target.checked;
@@ -266,11 +259,32 @@ async function fetchAndProcessUrlContent(url) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
         
-        const novelContentElement = doc.getElementById('novel_content') || doc.getElementById('bo_v_con') || doc.querySelector('article') || doc.querySelector('main');
+        // **URL 콘텐츠 추출 로직 개선:**
+        const contentSelectors = [
+            '#novel_content', // 기존 유지
+            '#bo_v_con',      // 기존 유지
+            'article',        // 일반적인 본문 요소
+            'main',           // 일반적인 본문 요소
+            '.content-body',  // 일반적인 콘텐츠 클래스 추가
+            '.entry-content', // 블로그/게시판 콘텐츠 클래스 추가
+            '.view-content',   // 뷰 페이지 콘텐츠 클래스 추가
+            '.read-content', // 리더 콘텐츠 클래스 추가
+            '.article-body', // 기사 본문 클래스 추가
+            '[itemprop="articleBody"]' // 시맨틱 태그 추가
+        ];
+        
+        let novelContentElement = null;
+        for (const selector of contentSelectors) {
+            novelContentElement = doc.querySelector(selector);
+            if (novelContentElement) break; 
+        }
+
         let text = '';
         if (novelContentElement) {
+            // HTML 구조를 무시하고 텍스트 내용만 추출
             text = novelContentElement.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
         } else {
+            //Fallback: 요소를 찾지 못하면 body 전체 텍스트 추출 (최소한의 안전장치)
             text = doc.body.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
         }
         
@@ -328,52 +342,20 @@ function processPastedText(text) {
     $textViewer.innerHTML = '';
 }
 
-
-// [추가] 모바일 전용 로드 버튼 핸들러
-/**
- * 모바일에서 텍스트 뷰어의 내용을 추출하고 URL인지 일반 텍스트인지 판단하여 처리합니다.
- */
-function handleMobileLoadButtonClick() {
-    // 텍스트 뷰어에서 내용을 추출하고 정리합니다.
-    let extractedText = $textViewer.textContent.trim();
-    extractedText = extractedText.replace(/(\n\s*){3,}/g, '\n\n').trim();
-
-    // 1. 내용 검증
-    if (!extractedText) {
-        alert("텍스트 뷰어에 텍스트 또는 URL을 붙여넣어주세요.");
-        return;
-    }
-    
-    // 2. 초기 안내 문구와 같다면 무시
-    const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
-    if (extractedText.replace(/\s+/g, ' ') === initialText) {
-        alert("텍스트 뷰어에 텍스트 또는 URL을 붙여넣어주세요.");
-        return;
-    }
-    
-    // 3. 내용 처리 및 뷰어 비우기
-    if (URL_PATTERN.test(extractedText)) {
-        fetchAndProcessUrlContent(extractedText);
-    } else {
-        processPastedText(extractedText);
-    }
-    
-    // 처리 후 텍스트 뷰어는 비웁니다.
-    $textViewer.innerHTML = ''; 
-}
-
-
 /**
  * 텍스트 뷰어 붙여넣기 이벤트 핸들러
+ * PC와 모바일 로직을 명확히 분리하여 오류를 방지하고, 모바일 추출 시 타이밍을 확보합니다.
  */
 function handlePasteInTextViewer(e) {
     // 1. 초기 안내 문구 제거를 시도합니다.
     clearInitialTextViewerContent();
     
+    let pasteData = '';
+
     if (!isMobile) {
         // **PC/Web 환경:** 클립보드 데이터를 직접 사용하고 기본 붙여넣기 방지 (안정적)
         e.preventDefault(); 
-        let pasteData = (e.clipboardData || window.clipboardData).getData('text');
+        pasteData = (e.clipboardData || window.clipboardData).getData('text');
         
         const trimmedText = pasteData.trim();
         if (trimmedText) {
@@ -386,11 +368,41 @@ function handlePasteInTextViewer(e) {
         return;
 
     } else {
-        // **Mobile 환경:**
-        // 붙여넣기 동작만 허용하여 텍스트 뷰어에 내용이 들어가도록 하고,
-        // **'음성로드' 버튼 클릭 시에만 청크 작업을 시작하도록** 자동 처리 로직을 제거합니다.
-        console.log("모바일 붙여넣기 감지. '음성로드' 버튼을 눌러주세요.");
-        // 기본 동작(텍스트 붙여넣기)을 허용해야 텍스트 뷰어에 내용이 남습니다. (e.preventDefault() 사용 안함)
+        // **Mobile 환경:** 기본 붙여넣기 동작을 허용 (e.preventDefault() 사용 안함)
+        
+        // DOM 업데이트를 기다린 후 텍스트를 추출합니다.
+        setTimeout(() => {
+            // DOM에서 텍스트를 추출하고, 불필요한 HTML과 공백을 정리합니다.
+            let extractedText = $textViewer.textContent.trim();
+            
+            // 공백과 줄바꿈을 정리합니다.
+            extractedText = extractedText.replace(/(\n\s*){3,}/g, '\n\n').trim();
+
+            // 추출 후 텍스트 뷰어 비우기
+            $textViewer.innerHTML = '';
+
+            if (extractedText) {
+                // 붙여넣기 된 내용이 초기 안내 문구와 같다면 무시
+                const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
+                if (extractedText.replace(/\s+/g, ' ') === initialText) {
+                     console.log("붙여넣기 내용이 안내 문구와 동일하여 무시됨.");
+                     // 추출에 실패하면 다시 안내 문구를 표시
+                     $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+                     return;
+                }
+                
+                if (URL_PATTERN.test(extractedText)) {
+                    fetchAndProcessUrlContent(extractedText);
+                } else {
+                    processPastedText(extractedText);
+                }
+            } else {
+                console.log("모바일 붙여넣기 후 텍스트 추출 실패 또는 빈 내용");
+                // 추출에 실패하면 다시 안내 문구를 표시
+                $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+            }
+        }, 250); // 지연 시간을 250ms로 늘려 안정성 확보
+
         return; 
     }
 }
