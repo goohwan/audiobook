@@ -263,14 +263,12 @@ async function fetchAndProcessUrlContent(url) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
         
-        // --- 🔍 전면 수정: 브라우저 읽기 모드와 유사한 본문 텍스트 추출 로직 (Heuristic-based) ---
-        
-        // 1. 초기 정리: 본문이 아닌 요소들 제거 (스크립트, 스타일, 네비게이션, 광고, 댓글 등)
-        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar, .comment-area, .pagination, .page-numbers, .related-posts, .breadcrumbs, .meta-data';
+        // --- 🔍 1단계: 초기 정리 (Noise Filtering) ---
+        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar, .comment-area, .pagination, .page-numbers, .related-posts, .breadcrumbs, .meta-data, .footer';
         doc.querySelectorAll(selectorsToRemove).forEach(el => el.remove());
         
-        // 2. 본문 후보 요소들 선택 (넓은 범위)
-        const contentCandidates = Array.from(doc.querySelectorAll('article, main, .post, .entry, .article-body, .content, .read-content, #container, #wrap, #content, [role="main"], #novel_content, #bo_v_con'));
+        // 2. 본문 후보 요소들 선택 (넓은 범위 확장)
+        const contentCandidates = Array.from(doc.querySelectorAll('article, main, .post, .entry, .article-body, .content, .read-content, #container, #wrap, #content, [role="main"], #novel_content, #bo_v_con, .chapter-content, .viewer, .contents, .article-main, .post-body')); 
         
         // 3. 텍스트 추출 및 정리 함수
         const cleanText = (element) => {
@@ -283,24 +281,39 @@ async function fetchAndProcessUrlContent(url) {
             return currentText;
         };
 
-        let bestText = cleanText(doc.body); // 기본값: 정리된 body 전체 텍스트
-        let maxTextLength = bestText.length;
+        let bestText = ''; 
+        let maxTextLength = 0;
         
-        // 4. 최적의 본문 요소 찾기: 가장 긴 텍스트를 가진 요소 선택
+        // 4. 최적의 본문 요소 찾기
         for (const candidate of contentCandidates) {
             const candidateText = cleanText(candidate);
-            // 후보 텍스트 길이가 현재까지의 최고 텍스트 길이의 50% 이상인 경우에만 고려 (노이즈 필터링)
-            if (candidateText.length > maxTextLength * 0.5) { 
-                if (candidateText.length > maxTextLength) {
-                    maxTextLength = candidateText.length;
-                    bestText = candidateText;
-                }
+            if (candidateText.length > maxTextLength) {
+                maxTextLength = candidateText.length;
+                bestText = candidateText;
             }
         }
         
         let text = bestText.trim();
         
-        // --- 🔍 추출 로직 수정 완료 ---
+        // 5. 🚀 Fallback 로직 강화 (가장 강력한 수집 모드)
+        if (text.length < 50) { 
+            console.warn("Heuristic 추출 실패. 강력한 <p> 태그 수집 Fallback 실행.");
+            
+            // 본문 요소가 아닌, HTML 전체에서 <p> 태그의 텍스트만 추출
+            const pTags = Array.from(doc.querySelectorAll('p'));
+            let fallbackText = pTags.map(p => p.textContent.trim()).join('\n\n');
+            fallbackText = fallbackText.replace(/(\n\s*){3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+            
+            // 만약 Heuristic 추출된 텍스트(text)가 너무 짧고, Fallback 텍스트가 충분히 길다면 사용
+            if (fallbackText.length > text.length * 0.8 && fallbackText.length > 50) {
+                 text = fallbackText;
+            } else if (text.length < 50) {
+                 // 최종적으로 body 전체 텍스트를 정리해서 사용
+                 text = cleanText(doc.body);
+            }
+        }
+        
+        // --- 🔍 추출 로직 최종 수정 완료 ---
 
         if (text.length < 50) {
              throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다. (추출된 문자열 길이: " + text.length + ")");
