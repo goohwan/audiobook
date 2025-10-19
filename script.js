@@ -65,6 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupTextViewerClickEvent();
     $textViewer.addEventListener('paste', handlePasteInTextViewer); // 텍스트 뷰어에 paste 이벤트 추가
+    
+    // 텍스트 뷰어에 포커스 되었을 때 안내문 자동 제거
+    $textViewer.addEventListener('focus', clearInitialTextViewerContent);
+
 
     $sequentialReadCheckbox.addEventListener('change', (e) => {
         isSequential = e.target.checked;
@@ -85,6 +89,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // 모바일 백그라운드 재생 및 화면 켜둠
     document.addEventListener('visibilitychange', handleVisibilityChange);
 });
+
+// 텍스트 뷰어 초기 안내문
+const INITIAL_TEXT_VIEWER_CONTENT = '<p>텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.</p>';
+
+/**
+ * 텍스트 뷰어에 포커스가 갔을 때, 초기 안내 문구라면 내용을 비웁니다.
+ * 이 함수는 모바일에서 붙여넣기 전/후의 잔여 텍스트 문제 해결에 도움을 줍니다.
+ */
+function clearInitialTextViewerContent() {
+    const currentContent = $textViewer.innerHTML.trim().toLowerCase().replace(/\s+/g, ' ');
+    const initialContent = INITIAL_TEXT_VIEWER_CONTENT.trim().toLowerCase().replace(/<\/?p>/g, '').replace(/\s+/g, ' ');
+
+    // 현재 내용이 초기 안내문과 유사하거나 비어있다면 내용을 비웁니다.
+    if (currentContent === initialContent || currentContent === '<p></p>' || currentContent === '<br>' || currentContent === '') {
+        $textViewer.innerHTML = '';
+    }
+}
+
 
 async function handleVisibilityChange() {
     if (document.visibilityState === 'hidden') {
@@ -244,9 +266,19 @@ async function fetchAndProcessUrlContent(url) {
             // 태그를 포함한 텍스트에서 불필요한 공백과 줄바꿈 정리
             text = novelContentElement.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
         } else {
-            throw new Error("페이지에서 주요 콘텐츠 요소(novel_content, bo_v_con, article, main)를 찾을 수 없습니다.");
+            // novelContentElement를 찾지 못한 경우 body 텍스트에서 추출
+            text = doc.body.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
         }
-        if (text.length < 50) throw new Error("추출된 텍스트 내용이 너무 짧습니다.");
+        
+        // 너무 짧은 텍스트는 안내문일 수 있으므로 최소 길이 검사
+        if (text.length < 50) {
+             // 텍스트가 너무 짧고 URL이 아니면 오류로 간주하지 않고 리턴 (예: 그냥 빈 페이지)
+             if (!URL_PATTERN.test(url)) throw new Error("추출된 텍스트 내용이 너무 짧습니다.");
+             else {
+                 // URL 붙여넣기였는데 추출된 텍스트가 짧으면 오류로 처리
+                 throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다.");
+             }
+        }
 
         const fileId = Date.now() + Math.floor(Math.random() * 1000000);
         const fileName = `[URL] ${url.substring(0, 50).replace(/(\/|\?)/g, ' ')}...`;
@@ -295,27 +327,66 @@ function processPastedText(text) {
     renderFileList();
     currentFileIndex = 0;
     processFileChunks(0, true);
+    
+    // 로드 성공 후 텍스트 뷰어 비우기
+    $textViewer.innerHTML = '';
 }
 
+/**
+ * 텍스트 뷰어 붙여넣기 이벤트 핸들러
+ * 모바일 붙여넣기 문제를 해결하기 위해 preventDefault()를 제거하고
+ * DOM 업데이트를 기다린 후 텍스트를 추출하도록 수정합니다.
+ */
 function handlePasteInTextViewer(e) {
-    e.preventDefault();
-    // 클립보드에서 텍스트 데이터만 가져옵니다.
-    const pasteData = (e.clipboardData || window.clipboardData).getData('text');
-    const trimmedText = pasteData.trim();
-
-    // 텍스트 뷰어의 내용을 비웁니다.
-    $textViewer.innerHTML = '';
+    // 1. 초기 안내 문구 제거
+    clearInitialTextViewerContent();
     
-    // 붙여넣은 텍스트가 URL 패턴인지 확인합니다.
-    if (URL_PATTERN.test(trimmedText)) {
-        fetchAndProcessUrlContent(trimmedText);
-    } else {
-        processPastedText(trimmedText);
+    // PC 환경에서만 클립보드 데이터 접근을 시도하여 바로 처리합니다.
+    // 모바일에서는 붙여넣기를 허용하고 DOM에서 텍스트를 추출하는 방식이 더 안정적입니다.
+    if (!isMobile) {
+        // PC/Web 환경: 클립보드 데이터 직접 추출
+        e.preventDefault();
+        const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+        const trimmedText = pasteData.trim();
+        
+        if (URL_PATTERN.test(trimmedText)) {
+            fetchAndProcessUrlContent(trimmedText);
+        } else {
+            processPastedText(trimmedText);
+        }
+        return;
     }
+
+    // 2. Mobile 환경:
+    // 붙여넣기를 허용하고, DOM 업데이트 후에 텍스트를 추출합니다.
+    // (e.preventDefault()를 제거하여 기본 붙여넣기 동작을 허용)
+    
+    // 붙여넣기 직후 DOM 업데이트를 기다립니다.
+    setTimeout(() => {
+        // DOM에서 텍스트를 추출하고, 불필요한 줄 바꿈/공백을 정리합니다.
+        const currentText = $textViewer.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
+        
+        // 추출 후 텍스트 뷰어 비우기
+        $textViewer.innerHTML = '';
+
+        if (currentText) {
+            if (URL_PATTERN.test(currentText)) {
+                fetchAndProcessUrlContent(currentText);
+            } else {
+                processPastedText(currentText);
+            }
+        } else {
+            // 붙여넣기는 되었지만 텍스트가 추출되지 않은 경우 (예외 처리)
+            console.log("모바일 붙여넣기 후 텍스트 추출 실패");
+        }
+    }, 50); // 짧은 지연 시간(50ms)을 주어 DOM 업데이트를 기다립니다.
 }
 
 function handleFiles(event) {
     console.log('handleFiles triggered:', event.target.files);
+    // 파일 업로드가 시작되면 텍스트 뷰어의 안내 문구를 지웁니다.
+    clearInitialTextViewerContent(); 
+    
     const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
     if (filesData.length + newFiles.length > MAX_FILES) {
         alert(`최대 ${MAX_FILES}개 파일만 첨부할 수 있습니다.`);
@@ -468,8 +539,7 @@ function setupFullScreenDragAndDrop() {
 
         const dt = e.dataTransfer;
         if (dt.files && dt.files.length > 0) {
-             // FileList를 $fileInput.files에 직접 할당할 수 없으므로, file input의 change 이벤트를 직접 발생시킬 수 있도록 처리합니다.
-             // 간단하게는 FileList를 받아 handleFiles를 호출합니다.
+             // FileList를 받아 handleFiles를 호출합니다.
              handleFiles({ target: { files: dt.files, value: '' } });
         }
     }
@@ -658,7 +728,7 @@ function deleteFile(index) {
     saveBookmark();
 
     if (filesData.length === 0) {
-        $textViewer.innerHTML = '<p>텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.</p>';
+        $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
         currentFileIndex = -1;
     }
 }
@@ -674,7 +744,7 @@ function clearAllFiles() {
     currentCharIndex = 0;
     localStorage.removeItem('autumnReaderBookmark');
     requestAnimationFrame(renderFileList);
-    $textViewer.innerHTML = '<p>텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.</p>';
+    $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
 }
 
 function setupFileListSortable() {
@@ -709,7 +779,7 @@ function setupFileListSortable() {
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
         // 파일이 없을 경우 초기 안내 문구 표시
-        $textViewer.innerHTML = '<p>텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.</p>';
+        $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
         return;
     }
 
