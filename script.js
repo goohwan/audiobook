@@ -245,6 +245,10 @@ function readTextFile(file, encoding) {
     });
 }
 
+/**
+ * URL에서 웹페이지 콘텐츠를 추출하고 처리합니다.
+ * Readability와 유사한 Heuristic을 사용하여 본문 텍스트를 찾습니다.
+ */
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     // URL 처리를 위해 프록시 사용 (CORS 회피)
@@ -259,37 +263,47 @@ async function fetchAndProcessUrlContent(url) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
         
-        // **URL 콘텐츠 추출 로직 개선:**
-        const contentSelectors = [
-            '#novel_content', // 기존 유지
-            '#bo_v_con',      // 기존 유지
-            'article',        // 일반적인 본문 요소
-            'main',           // 일반적인 본문 요소
-            '.content-body',  // 일반적인 콘텐츠 클래스 추가
-            '.entry-content', // 블로그/게시판 콘텐츠 클래스 추가
-            '.view-content',   // 뷰 페이지 콘텐츠 클래스 추가
-            '.read-content', // 리더 콘텐츠 클래스 추가
-            '.article-body', // 기사 본문 클래스 추가
-            '[itemprop="articleBody"]' // 시맨틱 태그 추가
-        ];
+        // --- 🔍 전면 수정: 브라우저 읽기 모드와 유사한 본문 텍스트 추출 로직 (Heuristic-based) ---
         
-        let novelContentElement = null;
-        for (const selector of contentSelectors) {
-            novelContentElement = doc.querySelector(selector);
-            if (novelContentElement) break; 
-        }
+        // 1. 초기 정리: 본문이 아닌 요소들 제거 (스크립트, 스타일, 네비게이션, 광고, 댓글 등)
+        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar, .comment-area, .pagination, .page-numbers, .related-posts, .breadcrumbs, .meta-data';
+        doc.querySelectorAll(selectorsToRemove).forEach(el => el.remove());
+        
+        // 2. 본문 후보 요소들 선택 (넓은 범위)
+        const contentCandidates = Array.from(doc.querySelectorAll('article, main, .post, .entry, .article-body, .content, .read-content, #container, #wrap, #content, [role="main"], #novel_content, #bo_v_con'));
+        
+        // 3. 텍스트 추출 및 정리 함수
+        const cleanText = (element) => {
+            if (!element) return '';
+            let currentText = element.textContent.trim();
+            // 불필요한 공백/줄바꿈 정리
+            currentText = currentText.replace(/(\n\s*){3,}/g, '\n\n'); // 3개 이상의 연속 줄바꿈을 2개로 압축
+            currentText = currentText.replace(/\t/g, ' '); // 탭 제거
+            currentText = currentText.replace(/\s{2,}/g, ' '); // 연속된 공백 하나로
+            return currentText;
+        };
 
-        let text = '';
-        if (novelContentElement) {
-            // HTML 구조를 무시하고 텍스트 내용만 추출
-            text = novelContentElement.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
-        } else {
-            //Fallback: 요소를 찾지 못하면 body 전체 텍스트 추출 (최소한의 안전장치)
-            text = doc.body.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
+        let bestText = cleanText(doc.body); // 기본값: 정리된 body 전체 텍스트
+        let maxTextLength = bestText.length;
+        
+        // 4. 최적의 본문 요소 찾기: 가장 긴 텍스트를 가진 요소 선택
+        for (const candidate of contentCandidates) {
+            const candidateText = cleanText(candidate);
+            // 후보 텍스트 길이가 현재까지의 최고 텍스트 길이의 50% 이상인 경우에만 고려 (노이즈 필터링)
+            if (candidateText.length > maxTextLength * 0.5) { 
+                if (candidateText.length > maxTextLength) {
+                    maxTextLength = candidateText.length;
+                    bestText = candidateText;
+                }
+            }
         }
         
+        let text = bestText.trim();
+        
+        // --- 🔍 추출 로직 수정 완료 ---
+
         if (text.length < 50) {
-             throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다.");
+             throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다. (추출된 문자열 길이: " + text.length + ")");
         }
 
         const fileId = Date.now() + Math.floor(Math.random() * 1000000);
