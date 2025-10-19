@@ -62,19 +62,12 @@ h1 {
     text-align: center;
 }
 
-/* [수정] 컨트롤 섹션을 한 줄로 만들고 가로 스크롤 허용 */
 .control-section {
     display: flex;
     align-items: center;
     gap: 10px;
-    white-space: nowrap; /* 요소가 한 줄에 있도록 강제 */
-    overflow-x: auto; /* 내용이 넘칠 경우 가로 스크롤 허용 */
-    padding-bottom: 5px; /* 스크롤바를 위한 공간 */
+    flex-wrap: wrap;
 }
-.control-section > * {
-    flex-shrink: 0; /* 개별 요소가 축소되는 것을 방지 */
-}
-/* [수정 끝] */
 
 #voice-select, #rate-slider {
     padding: 5px;
@@ -165,26 +158,7 @@ h1 {
     color: #2c2c2c;
 }
 
-/* [추가] 모바일 전용 버튼 표시 제어 */
-.mobile-only-area {
-    display: none; /* PC에서는 숨김 */
-    margin-bottom: 10px;
-}
-
-@media (max-width: 600px) { /* 600px 이하를 모바일로 간주 */
-    .mobile-only-area {
-        display: block; /* 모바일에서 모바일 로드 버튼 영역 표시 */
-    }
-    #mobile-load-btn {
-        width: 100%;
-        background-color: #FFD700;
-        border: none;
-        padding: 10px 20px;
-        cursor: pointer;
-        border-radius: 5px;
-        font-weight: bold;
-    }
-    
+@media (max-width: 450px) {
     .container {
         max-width: 100%;
         padding: 10px;
@@ -194,4 +168,3 @@ h1 {
         padding: 0;
     }
 }
-/* [추가 끝] */
