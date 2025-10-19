@@ -1,43 +1,47 @@
 // --- 전역 변수 설정 ---
-const MAX_FILES = 50;
-const CHUNK_SIZE_LIMIT = 500;
-const VISIBLE_CHUNKS = 10;
-const URL_PATTERN = /^(http|https):\/\/[^\s$.?#].[^\s]*$/i;
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif'];
+const MAX_FILES = 50; // 파일 첨부 최대 개수 50개
+const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수
+const VISIBLE_CHUNKS = 10; // 가상화: 한 번에 렌더링할 청크 수
+const URL_PATTERN = /^(http|https):\/\/[^\s$.?#].[^\s]*$/i; // URL 인식 패턴
 
-let filesData = [];
+let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
-let currentCharIndex = 0;
-let isSequential = true;
-let wakeLock = null;
-let noSleep = null;
+let currentCharIndex = 0; // 청크 내 현재 문자 위치
+let isSequential = true; // 정주행 기능 상태 (기본값: true)
+let wakeLock = null; // Wake Lock 객체
+let noSleep = null; // NoSleep.js 객체
 
+// Web Speech API 객체
 const synth = window.speechSynthesis;
-let currentUtterance = null;
+let currentUtterance = null; // 현재 발화 중인 SpeechSynthesisUtterance 객체
 let isPaused = false;
 let isSpeaking = false;
-let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent); // 모바일 감지
 
+// DOM 요소 캐시
 const $ = (selector) => document.querySelector(selector);
-const $fileInput = $('#file-input');
-const $fullScreenDropArea = $('#full-screen-drop-area');
+const $fileInput = $('#file-input'); // 숨겨진 파일 인풋 (프로그래밍 방식으로 사용)
+const $fullScreenDropArea = $('#full-screen-drop-area'); // 새로 추가된 전역 드롭존
 const $fileList = $('#file-list');
 const $textViewer = $('#text-viewer');
 const $voiceSelect = $('#voice-select');
 const $rateSlider = $('#rate-slider');
 const $rateDisplay = $('#rate-display');
 const $playPauseBtn = $('#play-pause-btn');
+
+// 추가된 DOM 요소
 const $sequentialReadCheckbox = $('#sequential-read-checkbox');
 const $clearAllFilesBtn = $('#clear-all-files-btn');
 
+// 텍스트 뷰어 초기 안내문
 const INITIAL_TEXT_VIEWER_TEXT = '텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.';
 const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
 
-// --- 초기화 ---
+// --- 초기화 및 이벤트 리스너 ---
 document.addEventListener('DOMContentLoaded', () => {
     if (!('speechSynthesis' in window)) {
-        alert('Web Speech API를 지원하지 않는 브라우저입니다.');
+        alert('죄송합니다. 이 브라우저는 Web Speech API를 지원하지 않아 서비스를 이용할 수 없습니다.');
         return;
     }
 
@@ -47,7 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
     synth.onvoiceschanged = populateVoiceList;
 
     $fileInput.addEventListener('change', handleFiles);
-    setupFullScreenDragAndDrop();
+
+    setupFullScreenDragAndDrop(); // 전역 드래그 앤 드롭 설정
 
     $('#play-pause-btn').addEventListener('click', togglePlayPause);
     $('#stop-btn').addEventListener('click', stopReading);
@@ -60,47 +65,66 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBookmark();
 
     setupTextViewerClickEvent();
-    $textViewer.addEventListener('paste', handlePasteInTextViewer);
+    $textViewer.addEventListener('paste', handlePasteInTextViewer); // 텍스트 뷰어에 paste 이벤트 추가
+    
+    // 텍스트 뷰어에 포커스 되었을 때 안내문 자동 제거
     $textViewer.addEventListener('focus', clearInitialTextViewerContent);
+
 
     $sequentialReadCheckbox.addEventListener('change', (e) => {
         isSequential = e.target.checked;
         saveBookmark();
     });
 
+    if (localStorage.getItem('autumnReaderBookmark')) {
+        const bookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
+        isSequential = bookmark.isSequential !== undefined ? bookmark.isSequential : true;
+    }
+    $sequentialReadCheckbox.checked = isSequential;
+
     $clearAllFilesBtn.addEventListener('click', clearAllFiles);
     $fileList.addEventListener('click', handleFileListItemClick);
 
     setupFileListSortable();
+
+    // 모바일 백그라운드 재생 및 화면 켜둠
     document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
-// --- 유틸리티 함수 ---
+/**
+ * 텍스트 뷰어에 포커스가 갔을 때, 초기 안내 문구라면 내용을 비웁니다.
+ */
 function clearInitialTextViewerContent() {
+    // 텍스트 내용만을 비교
     const currentText = $textViewer.textContent.trim().replace(/\s+/g, ' ');
     const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
+
+    // 현재 내용이 초기 안내문과 같거나 비어있다면 내용을 비웁니다.
     if (currentText === initialText || currentText === '') {
         $textViewer.innerHTML = '';
     }
 }
 
+
 async function handleVisibilityChange() {
     if (document.visibilityState === 'hidden') {
         if (isSpeaking && !isPaused) {
             if (isMobile) {
-                synth.cancel();
+                synth.cancel(); // 모바일에서 pause 대신 cancel
             } else {
                 synth.pause();
             }
             isPaused = true;
+            console.log('화면 잠금: 재생 일시정지');
         }
     } else if (document.visibilityState === 'visible' && isSpeaking && isPaused) {
         if (isMobile) {
-            speakNextChunk();
+            speakNextChunk(); // 모바일에서 resume 대신 재시작
         } else {
             synth.resume();
         }
         isPaused = false;
+        console.log('화면 복귀: 재생 재개');
         if (isSpeaking) {
             await requestWakeLock();
         }
@@ -115,59 +139,91 @@ window.addEventListener('beforeunload', () => {
     releaseWakeLock();
 });
 
-// --- Wake Lock ---
+// --- Wake Lock API 및 NoSleep.js ---
 async function requestWakeLock() {
     if ('wakeLock' in navigator) {
         try {
             wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => {
+                console.log('Wake Lock released.');
+            });
+            console.log('Wake Lock requested.');
         } catch (err) {
+            console.warn(`Wake Lock request failed: ${err.name}, ${err.message}`);
             if (typeof NoSleep !== 'undefined') {
                 noSleep = new NoSleep();
                 noSleep.enable();
+                console.log('NoSleep enabled for screen wake.');
             }
         }
     } else if (typeof NoSleep !== 'undefined') {
         noSleep = new NoSleep();
         noSleep.enable();
+        console.log('NoSleep enabled for screen wake.');
+    } else {
+        console.warn('Wake Lock API and NoSleep.js are not supported.');
     }
 }
 
 function releaseWakeLock() {
     if (wakeLock) {
-        wakeLock.release();
-        wakeLock = null;
+        wakeLock.release().then(() => {
+            wakeLock = null;
+            console.log('Wake Lock released successfully.');
+        }).catch((err) => {
+            console.error(`Wake Lock release failed: ${err.name}, ${err.message}`);
+        });
     }
     if (noSleep) {
         noSleep.disable();
         noSleep = null;
+        console.log('NoSleep disabled.');
     }
 }
 
-// --- 목소리 설정 ---
+// --- 목소리 및 설정 기능 ---
 function populateVoiceList() {
     const voices = synth.getVoices();
     $voiceSelect.innerHTML = '';
 
     let koreanVoices = [];
+    let googleKoreanVoiceName = null;
+    let preferredVoiceName = null;
+    let selectedVoice = null;
+
     voices.forEach((voice) => {
+        const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
         if (voice.lang.includes('ko')) {
-            const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
             koreanVoices.push(option);
+            if (voice.name.includes('Google') || voice.name.includes('Standard') || voice.name.includes('Wavenet')) {
+                googleKoreanVoiceName = voice.name;
+            }
         }
     });
 
     koreanVoices.forEach(option => $voiceSelect.appendChild(option));
 
+    if (googleKoreanVoiceName) {
+        preferredVoiceName = googleKoreanVoiceName;
+    } else if (koreanVoices.length > 0) {
+        preferredVoiceName = koreanVoices[0].value;
+    }
+
     const savedBookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
     if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
-        $voiceSelect.value = savedBookmark.settings.voice;
-    } else if (koreanVoices.length > 0) {
-        $voiceSelect.value = koreanVoices[0].value;
+        selectedVoice = savedBookmark.settings.voice;
+    } else if (preferredVoiceName) {
+        selectedVoice = preferredVoiceName;
+    }
+
+    if (selectedVoice) {
+        $voiceSelect.value = selectedVoice;
     }
 
     if (savedBookmark && savedBookmark.settings) {
         $rateSlider.value = savedBookmark.settings.rate;
     }
+
     updateRateDisplay();
 }
 
@@ -175,36 +231,27 @@ function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
 
-// --- 파일 처리 및 인코딩 변환 ---
+// --- 파일 처리 및 분할 기능 ---
 function readTextFile(file, encoding) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
-            let content = e.target.result;
-            // UTF-8이 아닌 경우 변환 시도
-            if (encoding !== 'UTF-8') {
-                try {
-                    const decoder = new TextDecoder(encoding);
-                    content = decoder.decode(new Uint8Array(e.target.result));
-                } catch {
-                    content = new TextDecoder('UTF-8').decode(new Uint8Array(e.target.result));
-                    console.log(`파일 "${file.name}"의 인코딩을 UTF-8로 변환했습니다.`);
-                }
-            }
-            resolve(content);
+            resolve(e.target.result);
         };
-        reader.onerror = (e) => reject(new Error(`파일 읽기 오류: ${e.target.error.name}`));
-        reader.readAsArrayBuffer(file);
+        reader.onerror = (e) => {
+            reject(new Error(`파일 읽기 오류 (${encoding}): ${e.target.error.name}`));
+        };
+        reader.readAsText(file, encoding);
     });
 }
 
 async function processImageOCR(fileOrUrl) {
-    const worker = await Tesseract.createWorker('kor');
+    const worker = await Tesseract.createWorker('kor'); // 한국어 OCR 워커 생성
     try {
         let imageSource;
-        if (typeof fileOrUrl === 'string') {
+        if (typeof fileOrUrl === 'string') { // URL인 경우
             imageSource = fileOrUrl;
-        } else {
+        } else { // File 객체인 경우
             imageSource = URL.createObjectURL(fileOrUrl);
         }
         const { data: { text } } = await worker.recognize(imageSource);
@@ -217,39 +264,46 @@ async function processImageOCR(fileOrUrl) {
     }
 }
 
-// --- URL 처리 (텍스트 추출) ---
+/**
+ * URL에서 웹페이지 콘텐츠를 추출하고 처리합니다.
+ * Readability와 유사한 Heuristic을 사용하여 본문 텍스트를 찾습니다.
+ */
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
+    // URL 처리를 위해 프록시 사용 (CORS 회피)
     const PROXY_URL = 'https://api.allorigins.win/raw?url=';
     const targetUrl = PROXY_URL + encodeURIComponent(url);
-    
     try {
         $textViewer.innerHTML = '웹페이지 콘텐츠를 불러오는 중입니다...';
         stopReading();
-        
         const response = await fetch(targetUrl);
         if (!response.ok) throw new Error(`HTTP 오류: ${response.status}`);
-        
         const htmlText = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
         
-        // 노이즈 제거
-        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar';
+        // --- 🔍 1단계: 초기 정리 (Noise Filtering) ---
+        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar, .comment-area, .pagination, .page-numbers, .related-posts, .breadcrumbs, .meta-data, .footer';
         doc.querySelectorAll(selectorsToRemove).forEach(el => el.remove());
         
-        // 본문 추출
-        const contentCandidates = Array.from(doc.querySelectorAll('article, main, .post, .entry, .content, #content'));
-        let bestText = '';
-        let maxTextLength = 0;
+        // 2. 본문 후보 요소들 선택 (넓은 범위 확장)
+        const contentCandidates = Array.from(doc.querySelectorAll('article, main, .post, .entry, .article-body, .content, .read-content, #container, #wrap, #content, [role="main"], #novel_content, #bo_v_con, .chapter-content, .viewer, .contents, .article-main, .post-body')); 
         
+        // 3. 텍스트 추출 및 정리 함수
         const cleanText = (element) => {
             if (!element) return '';
-            let text = element.textContent.trim();
-            text = text.replace(/(\n\s*){3,}/g, '\n\n').replace(/\t/g, ' ').replace(/\s{2,}/g, ' ');
-            return text;
+            let currentText = element.textContent.trim();
+            // 불필요한 공백/줄바꿈 정리
+            currentText = currentText.replace(/(\n\s*){3,}/g, '\n\n'); // 3개 이상의 연속 줄바꿈을 2개로 압축
+            currentText = currentText.replace(/\t/g, ' '); // 탭 제거
+            currentText = currentText.replace(/\s{2,}/g, ' '); // 연속된 공백 하나로
+            return currentText;
         };
+
+        let bestText = ''; 
+        let maxTextLength = 0;
         
+        // 4. 최적의 본문 요소 찾기
         for (const candidate of contentCandidates) {
             const candidateText = cleanText(candidate);
             if (candidateText.length > maxTextLength) {
@@ -260,15 +314,28 @@ async function fetchAndProcessUrlContent(url) {
         
         let text = bestText.trim();
         
-        // Fallback
-        if (text.length < 50) {
+        // 5. 🚀 Fallback 로직 강화 (가장 강력한 수집 모드)
+        if (text.length < 50) { 
+            console.warn("Heuristic 추출 실패. 강력한 <p> 태그 수집 Fallback 실행.");
+            
+            // 본문 요소가 아닌, HTML 전체에서 <p> 태그의 텍스트만 추출
             const pTags = Array.from(doc.querySelectorAll('p'));
-            text = pTags.map(p => p.textContent.trim()).join('\n\n');
-            text = text.replace(/(\n\s*){3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+            let fallbackText = pTags.map(p => p.textContent.trim()).join('\n\n');
+            fallbackText = fallbackText.replace(/(\n\s*){3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+            
+            // 만약 Heuristic 추출된 텍스트(text)가 너무 짧고, Fallback 텍스트가 충분히 길다면 사용
+            if (fallbackText.length > text.length * 0.8 && fallbackText.length > 50) {
+                 text = fallbackText;
+            } else if (text.length < 50) {
+                 // 최종적으로 body 전체 텍스트를 정리해서 사용
+                 text = cleanText(doc.body);
+            }
         }
         
+        // --- 🔍 추출 로직 최종 수정 완료 ---
+
         if (text.length < 50) {
-            throw new Error("콘텐츠를 찾을 수 없습니다.");
+             throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다. (추출된 문자열 길이: " + text.length + ")");
         }
 
         const fileId = Date.now() + Math.floor(Math.random() * 1000000);
@@ -280,24 +347,25 @@ async function fetchAndProcessUrlContent(url) {
             chunks: [],
             isProcessed: false
         };
-        
         filesData.unshift(newFileData);
         if (filesData.length > MAX_FILES) filesData.pop();
 
         renderFileList();
         currentFileIndex = 0;
         processFileChunks(0, true);
+
         $textViewer.innerHTML = '';
-        
     } catch (error) {
-        alert(`URL 로드 실패: ${error.message}`);
-        $textViewer.innerHTML = `<p style="color:red;">오류: ${error.message}</p>`;
+        alert(`URL 로드 실패: ${error.message}.`);
+        $textViewer.innerHTML = `<p style="color:red;">오류 발생: ${error.message}</p>`;
+        renderFileList();
     }
 }
 
-// --- 붙여넣기 처리 ---
 function processPastedText(text) {
-    if (!text) return;
+    if (!text) {
+        return;
+    }
 
     const fileId = Date.now() + Math.floor(Math.random() * 1000000);
     const fileName = `[클립보드] ${new Date().toLocaleTimeString()} - ${text.substring(0, 20)}...`;
@@ -316,17 +384,26 @@ function processPastedText(text) {
     renderFileList();
     currentFileIndex = 0;
     processFileChunks(0, true);
+    
     $textViewer.innerHTML = '';
 }
 
+/**
+ * 텍스트 뷰어 붙여넣기 이벤트 핸들러
+ * PC와 모바일 로직을 명확히 분리하여 오류를 방지하고, 모바일 추출 시 타이밍을 확보합니다.
+ */
 function handlePasteInTextViewer(e) {
+    // 1. 초기 안내 문구 제거를 시도합니다.
     clearInitialTextViewerContent();
     
+    let pasteData = '';
+
     if (!isMobile) {
-        e.preventDefault();
-        const pasteData = (e.clipboardData || window.clipboardData).getData('text');
-        const trimmedText = pasteData.trim();
+        // **PC/Web 환경:** 클립보드 데이터를 직접 사용하고 기본 붙여넣기 방지 (안정적)
+        e.preventDefault(); 
+        pasteData = (e.clipboardData || window.clipboardData).getData('text');
         
+        const trimmedText = pasteData.trim();
         if (trimmedText) {
             if (URL_PATTERN.test(trimmedText)) {
                 fetchAndProcessUrlContent(trimmedText);
@@ -335,73 +412,93 @@ function handlePasteInTextViewer(e) {
             }
         }
         return;
-    } 
-    
-    setTimeout(() => {
-        let extractedText = $textViewer.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
-        $textViewer.innerHTML = '';
 
-        if (extractedText && extractedText.replace(/\s+/g, ' ') !== INITIAL_TEXT_VIEWER_TEXT.replace(/\s+/g, ' ')) {
-            if (URL_PATTERN.test(extractedText)) {
-                fetchAndProcessUrlContent(extractedText);
+    } else {
+        // **Mobile 환경:** 기본 붙여넣기 동작을 허용 (e.preventDefault() 사용 안함)
+        
+        // DOM 업데이트를 기다린 후 텍스트를 추출합니다.
+        setTimeout(() => {
+            // DOM에서 텍스트를 추출하고, 불필요한 HTML과 공백을 정리합니다.
+            let extractedText = $textViewer.textContent.trim();
+            
+            // 공백과 줄바꿈을 정리합니다.
+            extractedText = extractedText.replace(/(\n\s*){3,}/g, '\n\n').trim();
+
+            // 추출 후 텍스트 뷰어 비우기
+            $textViewer.innerHTML = '';
+
+            if (extractedText) {
+                // 붙여넣기 된 내용이 초기 안내 문구와 같다면 무시
+                const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
+                if (extractedText.replace(/\s+/g, ' ') === initialText) {
+                     console.log("붙여넣기 내용이 안내 문구와 동일하여 무시됨.");
+                     // 추출에 실패하면 다시 안내 문구를 표시
+                     $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+                     return;
+                }
+                
+                if (URL_PATTERN.test(extractedText)) {
+                    fetchAndProcessUrlContent(extractedText);
+                } else {
+                    processPastedText(extractedText);
+                }
             } else {
-                processPastedText(extractedText);
+                console.log("모바일 붙여넣기 후 텍스트 추출 실패 또는 빈 내용");
+                // 추출에 실패하면 다시 안내 문구를 표시
+                $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
             }
-        } else {
-            $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
-        }
-    }, 250);
+        }, 250); // 지연 시간을 250ms로 늘려 안정성 확보
+
+        return; 
+    }
 }
 
-// --- 파일 업로드 처리 ---
 async function handleFiles(event) {
-    clearInitialTextViewerContent();
+    console.log('handleFiles triggered:', event.target.files);
+    // 파일 업로드가 시작되면 텍스트 뷰어의 안내 문구를 지웁니다.
+    clearInitialTextViewerContent(); 
     
     const newFiles = Array.from(event.target.files).filter(file => {
         const lowerName = file.name.toLowerCase();
         return lowerName.endsWith('.txt') || IMAGE_EXTENSIONS.some(ext => lowerName.endsWith(ext));
     });
-    
     if (filesData.length + newFiles.length > MAX_FILES) {
-        alert(`최대 ${MAX_FILES}개 파일만 첨부 가능합니다.`);
+        alert(`최대 ${MAX_FILES}개 파일만 첨부할 수 있습니다.`);
         newFiles.splice(MAX_FILES - filesData.length);
     }
-    
     if (newFiles.length === 0) {
+        console.log('No valid files selected');
         event.target.value = '';
         return;
     }
 
+    const bookmarkData = localStorage.getItem('autumnReaderBookmark');
+    let resumeTargetFileName = JSON.parse(bookmarkData)?.fileName;
+    let chunkIndexForResume = JSON.parse(bookmarkData)?.chunkIndex || 0;
+    let newFileIndexForResume = -1;
+
     const filePromises = newFiles.map(async (file) => {
         const lowerName = file.name.toLowerCase();
         let content = '';
-        
         if (lowerName.endsWith('.txt')) {
             try {
                 content = await readTextFile(file, 'UTF-8');
-                // UTF-8이 아닌 경우 확인 후 변환
-                if (!isUTF8(content)) {
-                    const decoder = new TextDecoder('windows-949');
-                    content = decoder.decode(new Uint8Array(new TextEncoder().encode(content)));
-                    console.log(`파일 "${file.name}"의 인코딩을 UTF-8로 변환했습니다.`);
-                }
             } catch (error) {
                 try {
                     content = await readTextFile(file, 'windows-949');
-                    if (!isUTF8(content)) {
-                        content = new TextDecoder('UTF-8').decode(new Uint8Array(new TextEncoder().encode(content)));
-                        console.log(`파일 "${file.name}"의 인코딩을 UTF-8로 변환했습니다.`);
-                    }
+                    if (!content) throw new Error("인코딩 재시도 후에도 내용이 비어있습니다.");
+                    console.log(`파일 "${file.name}"을(를) ANSI/windows-949 인코딩으로 읽었습니다.`);
                 } catch (error) {
                     alert(`파일 "${file.name}"을(를) 읽는 데 실패했습니다. 파일 인코딩을 확인해 주세요.`);
                     return null;
                 }
             }
         } else {
+            // 이미지 파일: OCR 처리
             $textViewer.innerHTML = `<p style="color:#FFD700;">[OCR 처리 중] : ${file.name}</p>`;
             content = await processImageOCR(file);
             if (!content) {
-                alert(`이미지 "${file.name}"에서 텍스트 추출 실패`);
+                alert(`이미지 "${file.name}"에서 텍스트를 추출할 수 없습니다.`);
                 return null;
             }
         }
@@ -410,77 +507,64 @@ async function handleFiles(event) {
         return {
             id: fileId,
             name: file.name,
-            fullText: content || '', // null 방지
+            fullText: content,
             chunks: [],
             isProcessed: false
         };
     });
 
-    const results = await Promise.all(filePromises);
-    const newlyReadFiles = results.filter(file => file !== null);
-    
-    if (newlyReadFiles.length === 0) {
-        event.target.value = '';
-        return;
-    }
+    Promise.all(filePromises).then(results => {
+        const newlyReadFiles = results.filter(file => file !== null);
+        if (newlyReadFiles.length === 0) {
+            event.target.value = '';
+            return;
+        }
 
-    newlyReadFiles.sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
-    filesData.push(...newlyReadFiles);
+        newlyReadFiles.sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
+        const startIndex = filesData.length;
+        filesData.push(...newlyReadFiles);
 
-    if (currentFileIndex === -1) {
-        currentFileIndex = filesData.length - newlyReadFiles.length;
-        processFileChunks(currentFileIndex, false);
-    }
+        let shouldResume = false;
+        if (resumeTargetFileName) {
+            const resumeFileIndexInNewList = newlyReadFiles.findIndex(f => f.name === resumeTargetFileName);
+            if (resumeFileIndexInNewList !== -1) {
+                newFileIndexForResume = startIndex + resumeFileIndexInNewList;
+                shouldResume = true;
+            }
+        }
 
-    renderFileList();
+        if (shouldResume) {
+            const resume = confirm(`[북마크 복원] "${filesData[newFileIndexForResume].name}"의 저장된 위치(${chunkIndexForResume + 1}번째 청크)부터 이어서 읽으시겠습니까?`);
+            if (resume) {
+                currentFileIndex = newFileIndexForResume;
+                currentChunkIndex = chunkIndexForResume;
+                processFileChunks(currentFileIndex, true);
+            }
+        } else if (currentFileIndex === -1) {
+            currentFileIndex = startIndex;
+            processFileChunks(currentFileIndex, false);
+        }
+
+        requestAnimationFrame(renderFileList);
+    });
+
     event.target.value = '';
 }
 
-// UTF-8 여부 확인 (간단한 체크)
-function isUTF8(str) {
-    try {
-        const encoder = new TextEncoder();
-        const decoder = new TextDecoder('utf-8');
-        const encoded = encoder.encode(str);
-        decoder.decode(encoded);
-        return true;
-    } catch (e) {
-        return false;
-    }
-}
-
-// --- 청크 처리 ---
 function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || file.isProcessed) return;
 
-    const text = file.fullText || ''; // text가 undefined일 경우 빈 문자열로 대체
-    if (!text) {
-        file.isProcessed = true;
-        file.chunks = [''];
-        console.warn(`파일 "${file.name}"의 텍스트가 비어 있습니다.`);
-        if (startReading && currentFileIndex === fileIndex) {
-            renderTextViewer(fileIndex);
-            startReadingFromCurrentChunk();
-        }
-        renderFileList();
-        return;
-    }
-
-    const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^\s]+/g) || [text]; // null 방지
+    const text = file.fullText || '';
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
     let currentChunk = '';
 
-    sentences.forEach((sentence, index) => {
-        if (!sentence) return;
-
-        const newChunk = currentChunk + sentence;
-        if (newChunk.length > CHUNK_SIZE_LIMIT) {
-            if (currentChunk) {
-                file.chunks.push(currentChunk.trim());
-            }
+    sentences.forEach(sentence => {
+        if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
+            file.chunks.push(currentChunk.trim());
             currentChunk = sentence;
         } else {
-            currentChunk = newChunk;
+            currentChunk += sentence;
         }
     });
 
@@ -488,29 +572,27 @@ function processFileChunks(fileIndex, startReading) {
         file.chunks.push(currentChunk.trim());
     }
 
-    if (file.chunks.length === 0 && text.length > 0) {
-        file.chunks.push(text);
+    if (file.chunks.length > 0) {
+        file.isProcessed = true;
+        console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
     }
 
-    file.isProcessed = true;
-    console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
-
     if (startReading && currentFileIndex === fileIndex) {
-        renderTextViewer(fileIndex);
+        requestAnimationFrame(() => renderTextViewer(fileIndex));
         startReadingFromCurrentChunk();
     }
 
-    renderFileList();
+    requestAnimationFrame(renderFileList);
 }
 
-// --- 드래그 앤 드롭 ---
+// 전역 드래그 앤 드롭 설정 (텔레그램 스타일)
 function setupFullScreenDragAndDrop() {
-    let dragCounter = 0;
+    let dragCounter = 0; // 드래그 진입 횟수를 카운트하여 정확한 드롭존 표시/숨김 처리
 
     document.addEventListener('dragenter', (e) => {
         e.preventDefault();
         dragCounter++;
-        if (dragCounter === 1) {
+        if (dragCounter === 1) { // 최상위 요소에 처음 진입했을 때만 표시
             $fullScreenDropArea.style.display = 'flex';
         }
     }, false);
@@ -522,69 +604,87 @@ function setupFullScreenDragAndDrop() {
 
     document.addEventListener('dragleave', (e) => {
         dragCounter--;
-        if (dragCounter === 0) {
+        if (dragCounter === 0) { // 모든 요소에서 벗어났을 때 숨김
             $fullScreenDropArea.style.display = 'none';
         }
     }, false);
 
-    $fullScreenDropArea.addEventListener('drop', async (e) => {
+    $fullScreenDropArea.addEventListener('drop', handleDrop, false);
+
+    async function handleDrop(e) {
         e.preventDefault();
-        dragCounter = 0;
+        dragCounter = 0; // 드롭하면 카운트 초기화
         $fullScreenDropArea.style.display = 'none';
 
         const dt = e.dataTransfer;
+        // DataTransfer 객체에서 'text/plain' 형식의 텍스트를 추출
         const droppedText = dt.getData('text/plain').trim();
         const files = dt.files;
 
+        // 1. 텍스트 데이터 확인 및 처리 (새로 추가된 기능)
         if (droppedText) {
-            if (IMAGE_EXTENSIONS.some(ext => droppedText.toLowerCase().endsWith(ext))) {
-                const ocrText = await processImageOCR(droppedText);
-                if (ocrText) {
-                    processPastedText(ocrText);
+            // URL 패턴 확인 (기존 handlePasteInTextViewer 로직 재사용)
+            if (URL_PATTERN.test(droppedText)) {
+                if (IMAGE_EXTENSIONS.some(ext => droppedText.toLowerCase().endsWith(ext))) {
+                    // 웹 이미지 URL: OCR 처리
+                    $textViewer.innerHTML = `<p style="color:#FFD700;">[웹 이미지 OCR 처리 중] : ${droppedText.substring(0, 50)}...</p>`;
+                    const ocrText = await processImageOCR(droppedText);
+                    if (ocrText) {
+                        processPastedText(ocrText);
+                    } else {
+                        alert(`웹 이미지 "${droppedText}"에서 텍스트를 추출할 수 없습니다.`);
+                    }
                 } else {
-                    alert('이미지에서 텍스트 추출 실패');
+                    fetchAndProcessUrlContent(droppedText);
                 }
-            } else if (URL_PATTERN.test(droppedText)) {
-                fetchAndProcessUrlContent(droppedText);
             } else {
                 processPastedText(droppedText);
             }
-            return;
+            // 텍스트를 처리했으면 파일은 무시하고 종료
+            return; 
         }
 
+        // 2. 파일 데이터 확인 및 처리 (기존 로직)
         if (files && files.length > 0) {
-            handleFiles({ target: { files: files, value: '' } });
+             // FileList를 받아 handleFiles를 호출합니다.
+             handleFiles({ target: { files: files, value: '' } });
+             return;
         }
-    }, false);
+        
+        // 텍스트나 파일이 없으면 안내 문구 다시 표시
+        if (filesData.length === 0) {
+            $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+        }
+    }
 }
 
-// --- 재생 컨트롤 ---
+
+// --- 재생 컨트롤 기능 ---
 async function startReadingFromCurrentChunk() {
-    if (currentFileIndex === -1 || !filesData[currentFileIndex]) return;
+    if (currentFileIndex === -1) return;
 
     const file = filesData[currentFileIndex];
-    if (!file.isProcessed || file.chunks.length === 0) {
-        console.log(`재생 시작 실패 - 파일: ${file.name}, 상태: ${file.isProcessed}, 청크 수: ${file.chunks.length}`);
-        alert("재생할 수 있는 텍스트가 없습니다. 파일을 확인하거나 처리 완료를 기다려 주세요.");
-        if (!file.isProcessed) processFileChunks(currentFileIndex, true);
+    if (!file || !file.isProcessed) {
+        alert(`파일 "${file.name}"을(를) 먼저 청크 처리해야 합니다. 처리를 시작합니다.`);
+        processFileChunks(currentFileIndex, true);
         return;
     }
 
     currentChunkIndex = Math.min(currentChunkIndex, file.chunks.length - 1);
-    currentCharIndex = 0;
+    currentCharIndex = 0; // 위치 초기화
     isSpeaking = true;
     isPaused = false;
     $playPauseBtn.textContent = '⏸️';
 
     synth.cancel();
     await requestWakeLock();
-    renderTextViewer(currentFileIndex);
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
     speakNextChunk();
 }
 
 function speakNextChunk() {
     const file = filesData[currentFileIndex];
-    if (!isSpeaking || isPaused || !file || !file.chunks || file.chunks.length === 0) return;
+    if (!isSpeaking || isPaused) return;
 
     if (currentChunkIndex >= file.chunks.length) {
         if (isSequential) {
@@ -596,14 +696,8 @@ function speakNextChunk() {
     }
 
     let textToSpeak = file.chunks[currentChunkIndex].slice(currentCharIndex);
-    if (!textToSpeak) {
-        currentChunkIndex++;
-        speakNextChunk();
-        return;
-    }
-
     currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
-    currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value) || synth.getVoices()[0]; // 기본 음성 fallback
+    currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value);
     currentUtterance.rate = parseFloat($rateSlider.value);
     currentUtterance.pitch = 1;
 
@@ -611,7 +705,7 @@ function speakNextChunk() {
         currentCharIndex = 0;
         currentChunkIndex++;
         saveBookmark();
-        renderTextViewer(currentFileIndex);
+        requestAnimationFrame(() => renderTextViewer(currentFileIndex));
         speakNextChunk();
     };
 
@@ -621,24 +715,18 @@ function speakNextChunk() {
         }
     };
 
-    try {
-        synth.speak(currentUtterance);
-    } catch (error) {
-        console.error('음성 합성 오류:', error);
-        alert('음성 재생 중 오류가 발생했습니다. 브라우저 설정을 확인해 주세요.');
-        stopReading();
-    }
+    synth.speak(currentUtterance);
 }
 
 function togglePlayPause() {
     if (currentFileIndex === -1) {
-        alert("재생할 파일을 선택해 주세요.");
+        alert("재생할 파일을 먼저 선택해주세요.");
         return;
     }
 
     if (isSpeaking && !isPaused) {
         if (isMobile) {
-            synth.cancel();
+            synth.cancel(); // 모바일에서 pause 대신 cancel
         } else {
             synth.pause();
         }
@@ -647,7 +735,7 @@ function togglePlayPause() {
         releaseWakeLock();
     } else if (isSpeaking && isPaused) {
         if (isMobile) {
-            speakNextChunk();
+            speakNextChunk(); // 모바일에서 resume 대신 재시작 (위치 유지)
         } else {
             synth.resume();
         }
@@ -668,7 +756,7 @@ function stopReading() {
     $playPauseBtn.textContent = '▶️';
     releaseWakeLock();
     if (currentFileIndex !== -1) {
-        renderTextViewer(currentFileIndex);
+        requestAnimationFrame(() => renderTextViewer(currentFileIndex));
     }
 }
 
@@ -677,7 +765,7 @@ function changeFile(newIndex) {
         alert("더 이상 읽을 파일이 없습니다.");
         stopReading();
         currentFileIndex = -1;
-        renderTextViewer(-1);
+        requestAnimationFrame(() => renderTextViewer(-1));
         return;
     }
 
@@ -689,14 +777,14 @@ function changeFile(newIndex) {
     if (!filesData[newIndex].isProcessed) {
         processFileChunks(newIndex, true);
     } else {
-        renderTextViewer(newIndex);
+        requestAnimationFrame(() => renderTextViewer(newIndex));
         if (isSpeaking) {
             startReadingFromCurrentChunk();
         }
     }
 }
 
-// --- 파일 목록 관리 ---
+// --- 파일 목록 관리 기능 ---
 function handleFileListItemClick(e) {
     const li = e.target.closest('li');
     if (!li) return;
@@ -729,23 +817,27 @@ function handleFileListItemClick(e) {
         startReadingFromCurrentChunk();
     }
 
-    renderFileList();
-    renderTextViewer(currentFileIndex);
+    requestAnimationFrame(renderFileList);
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
 }
 
 function deleteFile(index) {
+    if (index === -1) return;
+
     const wasCurrentFile = index === currentFileIndex;
     filesData.splice(index, 1);
 
     if (wasCurrentFile) {
         stopReading();
         currentFileIndex = filesData.length > 0 ? 0 : -1;
-        renderTextViewer(currentFileIndex);
+        currentChunkIndex = 0;
+        currentCharIndex = 0;
+        requestAnimationFrame(() => renderTextViewer(currentFileIndex));
     } else if (index < currentFileIndex) {
         currentFileIndex--;
     }
 
-    renderFileList();
+    requestAnimationFrame(renderFileList);
     saveBookmark();
 
     if (filesData.length === 0) {
@@ -755,18 +847,23 @@ function deleteFile(index) {
 }
 
 function clearAllFiles() {
-    if (filesData.length === 0 || !confirm("전체 파일을 삭제하시겠습니까?")) return;
+    if (filesData.length === 0) return;
+    if (!confirm("첨부된 파일 전체를 삭제하시겠습니까?")) return;
 
     stopReading();
     filesData = [];
     currentFileIndex = -1;
+    currentChunkIndex = 0;
+    currentCharIndex = 0;
     localStorage.removeItem('autumnReaderBookmark');
-    renderFileList();
+    requestAnimationFrame(renderFileList);
     $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
 }
 
 function setupFileListSortable() {
-    if (typeof Sortable === 'undefined') return;
+    if (typeof Sortable === 'undefined') {
+        return;
+    }
 
     new Sortable($fileList, {
         handle: '.drag-handle',
@@ -785,22 +882,23 @@ function setupFileListSortable() {
                 currentFileIndex++;
             }
 
-            renderFileList();
+            requestAnimationFrame(renderFileList);
             saveBookmark();
         },
     });
 }
 
-// --- UI 렌더링 ---
+// --- UI 및 북마크 기능 ---
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
+        // 파일이 없을 경우 초기 안내 문구 표시
         $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
         return;
     }
 
     const file = filesData[fileIndex];
     if (!file.isProcessed) {
-        $textViewer.innerHTML = `<p style="color:#FFD700;">[처리 중] : ${file.name}</p>`;
+        $textViewer.innerHTML = `<p style="color:#FFD700;">[파일 로딩 중/청크 처리 중] : ${file.name}</p>`;
         return;
     }
 
@@ -833,7 +931,11 @@ function setupTextViewerClickEvent() {
         if (filesData.length === 0) return;
 
         const chunkElement = e.target.closest('.text-chunk');
-        if (!chunkElement || chunkElement.classList.contains('highlight')) return;
+        if (!chunkElement) return;
+
+        if (chunkElement.classList.contains('highlight')) {
+            return;
+        }
 
         const newChunkIndex = parseInt(chunkElement.dataset.index);
         if (isNaN(newChunkIndex)) return;
@@ -852,7 +954,7 @@ function jumpToChunk(index) {
     isPaused = false;
     $playPauseBtn.textContent = '⏸️';
 
-    renderTextViewer(currentFileIndex);
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
     requestWakeLock();
     speakNextChunk();
 }
@@ -865,6 +967,7 @@ function renderFileList() {
 
         const fileNameSpan = document.createElement('span');
         fileNameSpan.textContent = file.name;
+        fileNameSpan.classList.add('file-item-name');
 
         const controlsDiv = document.createElement('div');
         controlsDiv.classList.add('file-controls');
@@ -877,7 +980,7 @@ function renderFileList() {
         const deleteBtn = document.createElement('button');
         deleteBtn.innerHTML = 'X';
         deleteBtn.classList.add('delete-file-btn');
-        deleteBtn.title = '삭제';
+        deleteBtn.title = '파일 삭제';
 
         if (!file.isProcessed) {
             const statusSpan = document.createElement('span');
@@ -891,13 +994,13 @@ function renderFileList() {
 
         li.appendChild(fileNameSpan);
         li.appendChild(controlsDiv);
+
         li.classList.toggle('active', index === currentFileIndex);
 
         $fileList.appendChild(li);
     });
 }
 
-// --- 북마크 ---
 function saveBookmark() {
     if (currentFileIndex === -1) return;
 
@@ -925,5 +1028,7 @@ function loadBookmark() {
     }
 
     isSequential = bookmark.isSequential !== undefined ? bookmark.isSequential : true;
-    $sequentialReadCheckbox.checked = isSequential;
+    if ($sequentialReadCheckbox) {
+        $sequentialReadCheckbox.checked = isSequential;
+    }
 }
