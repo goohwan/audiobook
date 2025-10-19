@@ -590,9 +590,32 @@ function setupFullScreenDragAndDrop() {
         $fullScreenDropArea.style.display = 'none';
 
         const dt = e.dataTransfer;
-        if (dt.files && dt.files.length > 0) {
+        // DataTransfer 객체에서 'text/plain' 형식의 텍스트를 추출
+        const droppedText = dt.getData('text/plain').trim();
+        const files = dt.files;
+
+        // 1. 텍스트 데이터 확인 및 처리 (새로 추가된 기능)
+        if (droppedText) {
+            // URL 패턴 확인 (기존 handlePasteInTextViewer 로직 재사용)
+            if (URL_PATTERN.test(droppedText)) {
+                fetchAndProcessUrlContent(droppedText);
+            } else {
+                processPastedText(droppedText);
+            }
+            // 텍스트를 처리했으면 파일은 무시하고 종료
+            return; 
+        }
+
+        // 2. 파일 데이터 확인 및 처리 (기존 로직)
+        if (files && files.length > 0) {
              // FileList를 받아 handleFiles를 호출합니다.
-             handleFiles({ target: { files: dt.files, value: '' } });
+             handleFiles({ target: { files: files, value: '' } });
+             return;
+        }
+        
+        // 텍스트나 파일이 없으면 안내 문구 다시 표시
+        if (filesData.length === 0) {
+            $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
         }
     }
 }
