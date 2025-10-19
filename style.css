@@ -42,26 +42,13 @@ h1 {
     color: #FFD700;
 }
 
-.upload-section, .control-section, .file-list-section, .text-viewer-section {
+.file-list-section, .text-viewer-section, .control-section {
     margin-bottom: 20px;
 }
 
-#drop-area {
-    border: 2px dashed #666;
-    padding: 20px;
-    text-align: center;
-    background-color: #3a3a3a;
-    cursor: pointer;
-    position: relative;
-    z-index: 10; /* 이벤트 차단 방지 */
-    pointer-events: auto;
-}
+/* 기존 드롭존 스타일 삭제 */
 
-#drop-area.active {
-    background-color: #4a4a4a;
-}
-
-/* style.css 에 추가 */
+/* 전역 드롭존 스타일 추가 */
 #full-screen-drop-area {
     position: fixed;
     top: 0;
@@ -80,36 +67,8 @@ h1 {
     text-align: center;
 }
 
-#file-upload-btn, #load-url-btn, #load-clipboard-btn, #clear-all-files-btn {
-    background-color: #FFD700;
-    border: none;
-    padding: 10px 20px;
-    cursor: pointer;
-    margin-top: 10px;
-    border-radius: 5px;
-    position: relative;
-    z-index: 10; /* 이벤트 차단 방지 */
-    pointer-events: auto;
-}
-
-#file-upload-btn:hover, #load-url-btn:hover, #load-clipboard-btn:hover, #clear-all-files-btn:hover {
-    background-color: #FFC107;
-}
-
-#url-text-input, #clipboard-text-input {
-    width: 100%;
-    padding: 10px;
-    margin-top: 10px;
-    background-color: #4a4a4a;
-    border: 1px solid #666;
-    color: #e0e0e0;
-    border-radius: 5px;
-}
-
-#clipboard-text-input {
-    height: 100px;
-    resize: vertical;
-}
+/* 사용하지 않는 버튼 스타일 제거 */
+/* #file-upload-btn, #load-url-btn, #load-clipboard-btn 스타일 제거 */
 
 .control-section {
     display: flex;
@@ -125,7 +84,7 @@ h1 {
     color: #e0e0e0;
 }
 
-#play-pause-btn, #stop-btn, #prev-file-btn, #next-file-btn {
+#play-pause-btn, #stop-btn, #prev-file-btn, #next-file-btn, #clear-all-files-btn {
     background-color: #FFD700;
     border: none;
     padding: 10px;
@@ -133,7 +92,7 @@ h1 {
     border-radius: 5px;
 }
 
-#play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover {
+#play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover, #clear-all-files-btn:hover {
     background-color: #FFC107;
 }
 
@@ -189,6 +148,7 @@ h1 {
     border-radius: 5px;
     max-height: 400px;
     overflow-y: auto;
+    min-height: 100px; /* contenteditable을 위해 최소 높이 설정 */
 }
 
 .text-chunk {
