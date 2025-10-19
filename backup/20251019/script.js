@@ -245,6 +245,10 @@ function readTextFile(file, encoding) {
     });
 }
 
+/**
+ * URL에서 웹페이지 콘텐츠를 추출하고 처리합니다.
+ * Readability와 유사한 Heuristic을 사용하여 본문 텍스트를 찾습니다.
+ */
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     // URL 처리를 위해 프록시 사용 (CORS 회피)
@@ -259,16 +263,60 @@ async function fetchAndProcessUrlContent(url) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
         
-        const novelContentElement = doc.getElementById('novel_content') || doc.getElementById('bo_v_con') || doc.querySelector('article') || doc.querySelector('main');
-        let text = '';
-        if (novelContentElement) {
-            text = novelContentElement.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
-        } else {
-            text = doc.body.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
+        // --- 🔍 1단계: 초기 정리 (Noise Filtering) ---
+        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar, .comment-area, .pagination, .page-numbers, .related-posts, .breadcrumbs, .meta-data, .footer';
+        doc.querySelectorAll(selectorsToRemove).forEach(el => el.remove());
+        
+        // 2. 본문 후보 요소들 선택 (넓은 범위 확장)
+        const contentCandidates = Array.from(doc.querySelectorAll('article, main, .post, .entry, .article-body, .content, .read-content, #container, #wrap, #content, [role="main"], #novel_content, #bo_v_con, .chapter-content, .viewer, .contents, .article-main, .post-body')); 
+        
+        // 3. 텍스트 추출 및 정리 함수
+        const cleanText = (element) => {
+            if (!element) return '';
+            let currentText = element.textContent.trim();
+            // 불필요한 공백/줄바꿈 정리
+            currentText = currentText.replace(/(\n\s*){3,}/g, '\n\n'); // 3개 이상의 연속 줄바꿈을 2개로 압축
+            currentText = currentText.replace(/\t/g, ' '); // 탭 제거
+            currentText = currentText.replace(/\s{2,}/g, ' '); // 연속된 공백 하나로
+            return currentText;
+        };
+
+        let bestText = ''; 
+        let maxTextLength = 0;
+        
+        // 4. 최적의 본문 요소 찾기
+        for (const candidate of contentCandidates) {
+            const candidateText = cleanText(candidate);
+            if (candidateText.length > maxTextLength) {
+                maxTextLength = candidateText.length;
+                bestText = candidateText;
+            }
         }
         
+        let text = bestText.trim();
+        
+        // 5. 🚀 Fallback 로직 강화 (가장 강력한 수집 모드)
+        if (text.length < 50) { 
+            console.warn("Heuristic 추출 실패. 강력한 <p> 태그 수집 Fallback 실행.");
+            
+            // 본문 요소가 아닌, HTML 전체에서 <p> 태그의 텍스트만 추출
+            const pTags = Array.from(doc.querySelectorAll('p'));
+            let fallbackText = pTags.map(p => p.textContent.trim()).join('\n\n');
+            fallbackText = fallbackText.replace(/(\n\s*){3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+            
+            // 만약 Heuristic 추출된 텍스트(text)가 너무 짧고, Fallback 텍스트가 충분히 길다면 사용
+            if (fallbackText.length > text.length * 0.8 && fallbackText.length > 50) {
+                 text = fallbackText;
+            } else if (text.length < 50) {
+                 // 최종적으로 body 전체 텍스트를 정리해서 사용
+                 text = cleanText(doc.body);
+            }
+        }
+        
+        // --- 🔍 추출 로직 최종 수정 완료 ---
+
         if (text.length < 50) {
-             throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다.");
+             throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다. (추출된 문자열 길이: " + text.length + ")");
         }
 
         const fileId = Date.now() + Math.floor(Math.random() * 1000000);
@@ -542,9 +590,32 @@ function setupFullScreenDragAndDrop() {
         $fullScreenDropArea.style.display = 'none';
 
         const dt = e.dataTransfer;
-        if (dt.files && dt.files.length > 0) {
+        // DataTransfer 객체에서 'text/plain' 형식의 텍스트를 추출
+        const droppedText = dt.getData('text/plain').trim();
+        const files = dt.files;
+
+        // 1. 텍스트 데이터 확인 및 처리 (새로 추가된 기능)
+        if (droppedText) {
+            // URL 패턴 확인 (기존 handlePasteInTextViewer 로직 재사용)
+            if (URL_PATTERN.test(droppedText)) {
+                fetchAndProcessUrlContent(droppedText);
+            } else {
+                processPastedText(droppedText);
+            }
+            // 텍스트를 처리했으면 파일은 무시하고 종료
+            return; 
+        }
+
+        // 2. 파일 데이터 확인 및 처리 (기존 로직)
+        if (files && files.length > 0) {
              // FileList를 받아 handleFiles를 호출합니다.
-             handleFiles({ target: { files: dt.files, value: '' } });
+             handleFiles({ target: { files: files, value: '' } });
+             return;
+        }
+        
+        // 텍스트나 파일이 없으면 안내 문구 다시 표시
+        if (filesData.length === 0) {
+            $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
         }
     }
 }

@@ -47,6 +47,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/nosleep.js@1/dist/NoSleep.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script> 
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
 </head>
 <body>
@@ -60,7 +61,7 @@
         <div id="left_pannel">
             <div class="file-list-section">
                 <h2>업로드된 파일</h2>
-                <input type="file" id="file-input" accept=".txt" multiple style="display: none;">
+                <input type="file" id="file-input" accept=".txt,image/*" multiple style="display: none;">
                 <ul id="file-list"></ul>
             </div>
 
@@ -70,12 +71,10 @@
                 <label for="rate-slider">재생 속도:</label>
                 <input type="range" id="rate-slider" min="0.5" max="2" step="0.1" value="1">
                 <span id="rate-display">1</span>
-                <div class="playback-controls"> 
-                    <button id="play-pause-btn">▶️</button>
-                    <button id="stop-btn">⏹️</button>
-                    <button id="prev-file-btn">⏮️</button>
-                    <button id="next-file-btn">⏭️</button>
-                </div>
+                <button id="play-pause-btn">▶️</button>
+                <button id="stop-btn">⏹️</button>
+                <button id="prev-file-btn">⏮️</button>
+                <button id="next-file-btn">⏭️</button>
                 <label><input type="checkbox" id="sequential-read-checkbox" checked> 정주행</label>
                 <button id="clear-all-files-btn">전체 삭제</button>
             </div>

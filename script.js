@@ -4,7 +4,13 @@ const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자
 const VISIBLE_CHUNKS = 10; // 가상화: 한 번에 렌더링할 청크 수
 const URL_PATTERN = /^(http|https):\/\/[^\s$.?#].[^\s]*$/i; // URL 인식 패턴
 
-let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
+// --- 파일 관련 상수 추가 ---
+const TEXT_EXTENSIONS = ['.txt'];
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif'];
+const ALLOWED_EXTENSIONS = [...TEXT_EXTENSIONS, ...IMAGE_EXTENSIONS];
+
+// filesData 구조: { id, name, fullText(텍스트파일 또는 OCR 결과), fileObject(이미지파일 객체), isImage, chunks, isProcessed(청크까지 완료), isOcrProcessing }
+let filesData = []; 
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
 let currentCharIndex = 0; // 청크 내 현재 문자 위치
@@ -245,10 +251,6 @@ function readTextFile(file, encoding) {
     });
 }
 
-/**
- * URL에서 웹페이지 콘텐츠를 추출하고 처리합니다.
- * Readability와 유사한 Heuristic을 사용하여 본문 텍스트를 찾습니다.
- */
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     // URL 처리를 위해 프록시 사용 (CORS 회피)
@@ -313,8 +315,6 @@ async function fetchAndProcessUrlContent(url) {
             }
         }
         
-        // --- 🔍 추출 로직 최종 수정 완료 ---
-
         if (text.length < 50) {
              throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다. (추출된 문자열 길이: " + text.length + ")");
         }
@@ -325,15 +325,18 @@ async function fetchAndProcessUrlContent(url) {
             id: fileId,
             name: fileName,
             fullText: text,
+            fileObject: null, // URL은 파일 객체가 없음
+            isImage: false,
             chunks: [],
-            isProcessed: false
+            isProcessed: false,
+            isOcrProcessing: false
         };
         filesData.unshift(newFileData);
         if (filesData.length > MAX_FILES) filesData.pop();
 
         renderFileList();
         currentFileIndex = 0;
-        processFileChunks(0, true);
+        processFile(0, true); // URL은 바로 청크 및 재생 시작
 
         $textViewer.innerHTML = '';
     } catch (error) {
@@ -342,6 +345,7 @@ async function fetchAndProcessUrlContent(url) {
         renderFileList();
     }
 }
+
 
 function processPastedText(text) {
     if (!text) {
@@ -355,8 +359,11 @@ function processPastedText(text) {
         id: fileId,
         name: fileName,
         fullText: text,
+        fileObject: null,
+        isImage: false,
         chunks: [],
-        isProcessed: false
+        isProcessed: false,
+        isOcrProcessing: false
     };
 
     filesData.unshift(newFileData);
@@ -364,23 +371,21 @@ function processPastedText(text) {
 
     renderFileList();
     currentFileIndex = 0;
-    processFileChunks(0, true);
+    processFile(0, true); // 붙여넣은 텍스트는 바로 청크 및 재생 시작
     
     $textViewer.innerHTML = '';
 }
 
 /**
  * 텍스트 뷰어 붙여넣기 이벤트 핸들러
- * PC와 모바일 로직을 명확히 분리하여 오류를 방지하고, 모바일 추출 시 타이밍을 확보합니다.
  */
 function handlePasteInTextViewer(e) {
-    // 1. 초기 안내 문구 제거를 시도합니다.
     clearInitialTextViewerContent();
     
     let pasteData = '';
 
     if (!isMobile) {
-        // **PC/Web 환경:** 클립보드 데이터를 직접 사용하고 기본 붙여넣기 방지 (안정적)
+        // **PC/Web 환경:**
         e.preventDefault(); 
         pasteData = (e.clipboardData || window.clipboardData).getData('text');
         
@@ -395,25 +400,17 @@ function handlePasteInTextViewer(e) {
         return;
 
     } else {
-        // **Mobile 환경:** 기본 붙여넣기 동작을 허용 (e.preventDefault() 사용 안함)
+        // **Mobile 환경:** 기본 붙여넣기 허용 후 텍스트 추출
         
-        // DOM 업데이트를 기다린 후 텍스트를 추출합니다.
         setTimeout(() => {
-            // DOM에서 텍스트를 추출하고, 불필요한 HTML과 공백을 정리합니다.
             let extractedText = $textViewer.textContent.trim();
-            
-            // 공백과 줄바꿈을 정리합니다.
             extractedText = extractedText.replace(/(\n\s*){3,}/g, '\n\n').trim();
 
-            // 추출 후 텍스트 뷰어 비우기
             $textViewer.innerHTML = '';
 
             if (extractedText) {
-                // 붙여넣기 된 내용이 초기 안내 문구와 같다면 무시
                 const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
                 if (extractedText.replace(/\s+/g, ' ') === initialText) {
-                     console.log("붙여넣기 내용이 안내 문구와 동일하여 무시됨.");
-                     // 추출에 실패하면 다시 안내 문구를 표시
                      $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
                      return;
                 }
@@ -424,28 +421,31 @@ function handlePasteInTextViewer(e) {
                     processPastedText(extractedText);
                 }
             } else {
-                console.log("모바일 붙여넣기 후 텍스트 추출 실패 또는 빈 내용");
-                // 추출에 실패하면 다시 안내 문구를 표시
                 $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
             }
-        }, 250); // 지연 시간을 250ms로 늘려 안정성 확보
+        }, 250);
 
         return; 
     }
 }
 
+/**
+ * 파일 로딩 (TXT 또는 이미지 파일) 및 filesData 구조 생성
+ */
 function handleFiles(event) {
-    console.log('handleFiles triggered:', event.target.files);
-    // 파일 업로드가 시작되면 텍스트 뷰어의 안내 문구를 지웁니다.
     clearInitialTextViewerContent(); 
     
-    const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
+    // 허용된 확장자를 가진 파일만 필터링
+    const newFiles = Array.from(event.target.files).filter(file => {
+        const lowerName = file.name.toLowerCase();
+        return ALLOWED_EXTENSIONS.some(ext => lowerName.endsWith(ext));
+    });
+
     if (filesData.length + newFiles.length > MAX_FILES) {
         alert(`최대 ${MAX_FILES}개 파일만 첨부할 수 있습니다.`);
         newFiles.splice(MAX_FILES - filesData.length);
     }
     if (newFiles.length === 0) {
-        console.log('No valid .txt files selected');
         event.target.value = '';
         return;
     }
@@ -457,21 +457,27 @@ function handleFiles(event) {
 
     const filePromises = newFiles.map(file => {
         return (async () => {
-            console.log(`Reading file: ${file.name}`);
+            const lowerName = file.name.toLowerCase();
+            const isImage = IMAGE_EXTENSIONS.some(ext => lowerName.endsWith(ext));
             let content = '';
-            try {
-                content = await readTextFile(file, 'UTF-8');
-            } catch (error) {
-                console.warn(`UTF-8 읽기 중 오류 발생: ${error.message}`);
-            }
-            if (content.includes('\ufffd') || !content) {
+            let fileObject = null;
+
+            if (isImage) {
+                fileObject = file; // 이미지 파일 객체 자체를 저장
+            } else { // Text file (.txt)
                 try {
-                    content = await readTextFile(file, 'windows-949');
-                    if (!content) throw new Error("인코딩 재시도 후에도 내용이 비어있습니다.");
-                    console.log(`파일 "${file.name}"을(를) ANSI/windows-949 인코딩으로 읽었습니다.`);
+                    content = await readTextFile(file, 'UTF-8');
                 } catch (error) {
-                    alert(`파일 "${file.name}"을(를) 읽는 데 실패했습니다. 파일 인코딩을 확인해 주세요.`);
-                    return null;
+                    // console.warn(`UTF-8 읽기 중 오류 발생: ${error.message}`);
+                }
+                if (content.includes('\ufffd') || !content) {
+                    try {
+                        content = await readTextFile(file, 'windows-949');
+                        if (!content) throw new Error("인코딩 재시도 후에도 내용이 비어있습니다.");
+                    } catch (error) {
+                        alert(`파일 "${file.name}"을(를) 읽는 데 실패했습니다. 파일 인코딩을 확인해 주세요.`);
+                        return null;
+                    }
                 }
             }
 
@@ -479,9 +485,12 @@ function handleFiles(event) {
             return {
                 id: fileId,
                 name: file.name,
-                fullText: content,
+                fullText: content, 
+                fileObject: fileObject, 
+                isImage: isImage,
                 chunks: [],
-                isProcessed: false
+                isProcessed: false,
+                isOcrProcessing: false
             };
         })();
     });
@@ -493,6 +502,7 @@ function handleFiles(event) {
             return;
         }
 
+        // 파일명 기준으로 정렬 (이미지와 텍스트 파일 모두)
         newlyReadFiles.sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
         const startIndex = filesData.length;
         filesData.push(...newlyReadFiles);
@@ -511,26 +521,46 @@ function handleFiles(event) {
             if (resume) {
                 currentFileIndex = newFileIndexForResume;
                 currentChunkIndex = chunkIndexForResume;
-                processFileChunks(currentFileIndex, true);
+                processFile(currentFileIndex, true); // 북마크 복원 시 처리 및 재생 시작
             }
         } else if (currentFileIndex === -1) {
-            currentFileIndex = startIndex;
-            processFileChunks(currentFileIndex, false);
+            currentFileIndex = startIndex; 
+            // 첫 파일이 이미지인 경우, OCR은 재생 버튼 클릭/파일 클릭 시에만 시작합니다.
+            if (!filesData[currentFileIndex].isImage) {
+                 processFile(currentFileIndex, false); // 텍스트 파일은 바로 청크 처리
+            }
         }
 
         requestAnimationFrame(renderFileList);
+        if (currentFileIndex !== -1) {
+             requestAnimationFrame(() => renderTextViewer(currentFileIndex));
+        }
     });
 
     event.target.value = '';
 }
 
+
+/**
+ * 텍스트 내용을 문장 기반으로 청크로 분할합니다.
+ */
 function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
-    if (!file || file.isProcessed) return;
+    if (!file) return;
+
+    if (!file.fullText || file.fullText.length === 0) {
+        file.isProcessed = true; 
+        file.chunks = ["파일 내용이 비어있거나, 이미지 OCR 결과가 없습니다."];
+    } else if (file.isProcessed) {
+        // 이미 처리된 경우
+        return;
+    }
+
 
     const text = file.fullText;
     const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
     let currentChunk = '';
+    file.chunks = []; 
 
     sentences.forEach(sentence => {
         if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
@@ -547,7 +577,7 @@ function processFileChunks(fileIndex, startReading) {
 
     if (file.chunks.length > 0) {
         file.isProcessed = true;
-        console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
+        console.log(`[청크 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
     }
 
     if (startReading && currentFileIndex === fileIndex) {
@@ -558,7 +588,77 @@ function processFileChunks(fileIndex, startReading) {
     requestAnimationFrame(renderFileList);
 }
 
-// 전역 드래그 앤 드롭 설정 (텔레그램 스타일)
+/**
+ * Tesseract.js를 사용하여 이미지 파일의 텍스트를 인식합니다.
+ */
+async function processImageOCR(fileIndex, startReading) {
+    const file = filesData[fileIndex];
+    if (!file.fileObject || file.isOcrProcessing || file.isProcessed) return;
+
+    file.isOcrProcessing = true;
+    requestAnimationFrame(() => renderTextViewer(fileIndex));
+    requestAnimationFrame(renderFileList);
+
+    // Tesseract.js를 사용하여 OCR 수행
+    try {
+        const worker = await Tesseract.createWorker({
+            langPath: 'https://tessdata.projectnaptha.com/4.00/', 
+        });
+        
+        // 한국어와 영어를 동시에 사용
+        await worker.loadLanguage('kor+eng');
+        await worker.initialize('kor+eng');
+
+        // OCR 실행
+        const { data: { text } } = await worker.recognize(file.fileObject);
+        
+        file.fullText = text.trim();
+        file.isOcrProcessing = false;
+        
+        await worker.terminate();
+
+        if (file.fullText.length === 0) {
+            throw new Error("OCR 인식 결과가 없습니다.");
+        }
+
+        // 인식된 텍스트로 청크 작업 수행
+        processFileChunks(fileIndex, startReading);
+
+    } catch (error) {
+        console.error("OCR 처리 중 오류 발생:", error);
+        file.isOcrProcessing = false;
+        file.isProcessed = true; // Processing failed
+        file.fullText = `[OCR 실패] ${file.name} 이미지 파일의 텍스트 인식에 실패했습니다. (오류: ${error.message})`;
+        
+        // 실패 메시지를 청크하여 읽을 수 있도록 처리
+        processFileChunks(fileIndex, startReading);
+    }
+}
+
+/**
+ * 파일 유형에 따라 적절한 처리 (OCR 또는 청크)를 시작합니다.
+ */
+async function processFile(fileIndex, startReading) {
+    const file = filesData[fileIndex];
+    if (!file) return;
+
+    if (file.isProcessed) {
+        if (startReading) {
+            requestAnimationFrame(() => renderTextViewer(fileIndex));
+            startReadingFromCurrentChunk();
+        }
+        return;
+    }
+
+    if (file.isImage) {
+        await processImageOCR(fileIndex, startReading);
+    } else {
+        processFileChunks(fileIndex, startReading);
+    }
+}
+
+
+// 전역 드래그 앤 드롭 설정 (텍스트 및 파일 지원)
 function setupFullScreenDragAndDrop() {
     let dragCounter = 0; // 드래그 진입 횟수를 카운트하여 정확한 드롭존 표시/숨김 처리
 
@@ -590,29 +690,31 @@ function setupFullScreenDragAndDrop() {
         $fullScreenDropArea.style.display = 'none';
 
         const dt = e.dataTransfer;
-        // DataTransfer 객체에서 'text/plain' 형식의 텍스트를 추출
+        // 1. 텍스트 데이터 확인 및 처리
         const droppedText = dt.getData('text/plain').trim();
         const files = dt.files;
 
-        // 1. 텍스트 데이터 확인 및 처리 (새로 추가된 기능)
         if (droppedText) {
-            // URL 패턴 확인 (기존 handlePasteInTextViewer 로직 재사용)
             if (URL_PATTERN.test(droppedText)) {
                 fetchAndProcessUrlContent(droppedText);
             } else {
                 processPastedText(droppedText);
             }
-            // 텍스트를 처리했으면 파일은 무시하고 종료
             return; 
         }
 
-        // 2. 파일 데이터 확인 및 처리 (기존 로직)
-        if (files && files.length > 0) {
-             // FileList를 받아 handleFiles를 호출합니다.
-             handleFiles({ target: { files: files, value: '' } });
+        // 2. 파일 데이터 확인 및 처리 (TXT와 이미지 파일만 허용)
+        const validFiles = Array.from(files).filter(file => {
+            const lowerName = file.name.toLowerCase();
+            return ALLOWED_EXTENSIONS.some(ext => lowerName.endsWith(ext));
+        });
+
+        if (validFiles.length > 0) {
+             // FileList를 handleFiles에 전달
+             handleFiles({ target: { files: validFiles, value: '' } });
              return;
         }
-        
+
         // 텍스트나 파일이 없으면 안내 문구 다시 표시
         if (filesData.length === 0) {
             $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
@@ -626,10 +728,17 @@ async function startReadingFromCurrentChunk() {
     if (currentFileIndex === -1) return;
 
     const file = filesData[currentFileIndex];
-    if (!file || !file.isProcessed) {
-        alert(`파일 "${file.name}"을(를) 먼저 청크 처리해야 합니다. 처리를 시작합니다.`);
-        processFileChunks(currentFileIndex, true);
-        return;
+    
+    // 처리되지 않은 파일이면 OCR 또는 청크 처리를 시작합니다.
+    if (!file.isProcessed) {
+        // 이미 OCR 작업 중이면 대기
+        if (file.isImage && file.isOcrProcessing) {
+             console.log("OCR 작업 중이므로 대기합니다.");
+             return;
+        }
+        
+        await processFile(currentFileIndex, true);
+        return; // processFile이 성공하면 재귀적으로 startReadingFromCurrentChunk를 호출합니다.
     }
 
     currentChunkIndex = Math.min(currentChunkIndex, file.chunks.length - 1);
@@ -682,13 +791,21 @@ function speakNextChunk() {
 
 function togglePlayPause() {
     if (currentFileIndex === -1) {
-        alert("재생할 파일을 먼저 선택해주세요.");
+        alert("재생할 파일 또는 텍스트를 먼저 준비해주세요.");
+        return;
+    }
+    
+    // 파일이 이미지이고 OCR이 완료되지 않은 경우 OCR 시작
+    const file = filesData[currentFileIndex];
+    if (file.isImage && !file.isProcessed) {
+        processFile(currentFileIndex, true);
         return;
     }
 
+
     if (isSpeaking && !isPaused) {
         if (isMobile) {
-            synth.cancel(); // 모바일에서 pause 대신 cancel
+            synth.cancel(); 
         } else {
             synth.pause();
         }
@@ -697,7 +814,7 @@ function togglePlayPause() {
         releaseWakeLock();
     } else if (isSpeaking && isPaused) {
         if (isMobile) {
-            speakNextChunk(); // 모바일에서 resume 대신 재시작 (위치 유지)
+            speakNextChunk(); 
         } else {
             synth.resume();
         }
@@ -705,6 +822,7 @@ function togglePlayPause() {
         $playPauseBtn.textContent = '⏸️';
         requestWakeLock();
     } else {
+        // 최초 재생 시작 또는 파일 처리 시작
         startReadingFromCurrentChunk();
     }
 }
@@ -737,7 +855,7 @@ function changeFile(newIndex) {
     currentCharIndex = 0;
 
     if (!filesData[newIndex].isProcessed) {
-        processFileChunks(newIndex, true);
+        processFile(newIndex, isSpeaking); // 현재 재생 상태를 유지하며 다음 파일 처리
     } else {
         requestAnimationFrame(() => renderTextViewer(newIndex));
         if (isSpeaking) {
@@ -773,14 +891,10 @@ function handleFileListItemClick(e) {
     currentChunkIndex = 0;
     currentCharIndex = 0;
 
-    if (!filesData[currentFileIndex].isProcessed) {
-        processFileChunks(currentFileIndex, true);
-    } else {
-        startReadingFromCurrentChunk();
-    }
+    // 파일을 클릭하면 바로 처리 및 재생 시작 (OCR 필요 시 OCR 시작)
+    processFile(currentFileIndex, true); 
 
     requestAnimationFrame(renderFileList);
-    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
 }
 
 function deleteFile(index) {
@@ -853,14 +967,21 @@ function setupFileListSortable() {
 // --- UI 및 북마크 기능 ---
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
-        // 파일이 없을 경우 초기 안내 문구 표시
         $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
         return;
     }
 
     const file = filesData[fileIndex];
     if (!file.isProcessed) {
-        $textViewer.innerHTML = `<p style="color:#FFD700;">[파일 로딩 중/청크 처리 중] : ${file.name}</p>`;
+        let statusMessage = `[파일 로딩 중/청크 처리 중] : ${file.name}`;
+        if (file.isImage) {
+            if (file.isOcrProcessing) {
+                statusMessage = `[이미지 OCR 처리 중] : ${file.name} - 잠시만 기다려주세요... (Tesseract.js)`;
+            } else {
+                statusMessage = `[이미지 파일] : ${file.name} - 재생 버튼(▶️) 또는 파일 클릭 시 텍스트 인식(OCR)을 시작합니다.`;
+            }
+        }
+        $textViewer.innerHTML = `<p style="color:#FFD700;">${statusMessage}</p>`;
         return;
     }
 
@@ -944,9 +1065,18 @@ function renderFileList() {
         deleteBtn.classList.add('delete-file-btn');
         deleteBtn.title = '파일 삭제';
 
+        // OCR/처리 상태 표시
         if (!file.isProcessed) {
+            let statusText = ' (⏳ 대기)';
+            if (file.isImage) {
+                if (file.isOcrProcessing) {
+                    statusText = ' (⚙️ OCR 중...)';
+                } else {
+                    statusText = ' (🖼️ 이미지 대기)';
+                }
+            }
             const statusSpan = document.createElement('span');
-            statusSpan.textContent = ' (⏳ 대기)';
+            statusSpan.textContent = statusText;
             statusSpan.style.color = '#FFD700';
             fileNameSpan.appendChild(statusSpan);
         }

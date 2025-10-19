@@ -66,19 +66,7 @@ h1 {
     display: flex;
     align-items: center;
     gap: 10px;
-    /* 줄바꿈을 허용하여 가로폭 초과 시 다음 줄로 이동 */
-    flex-wrap: wrap; 
-}
-
-/* 재생 관련 버튼 그룹 스타일 추가 */
-.playback-controls {
-    display: flex;
-    gap: 0;
-    /* control-section의 gap과 구분되도록 약간의 마진 */
-    margin-right: 10px;
-    /* 버튼 묶음 전체에 둥근 모서리 및 오버플로우 숨김 처리 */
-    border-radius: 5px; 
-    overflow: hidden; 
+    flex-wrap: wrap;
 }
 
 #voice-select, #rate-slider {
@@ -88,21 +76,11 @@ h1 {
     color: #e0e0e0;
 }
 
-/* 그룹에 속한 버튼들의 공통 스타일 */
-.playback-controls button, #clear-all-files-btn {
+#play-pause-btn, #stop-btn, #prev-file-btn, #next-file-btn, #clear-all-files-btn {
     background-color: #FFD700;
     border: none;
     padding: 10px;
     cursor: pointer;
-}
-
-/* 그룹에 속한 버튼들은 둥근 모서리를 제거 */
-.playback-controls button {
-    border-radius: 0;
-}
-
-/* 그룹에 속하지 않는 전체 삭제 버튼만 둥근 모서리 유지 */
-#clear-all-files-btn {
     border-radius: 5px;
 }
 
