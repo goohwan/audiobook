@@ -19,23 +19,28 @@ let isPaused = false;
 let isSpeaking = false;
 let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
 
-const $ = (selector) => document.querySelector(selector);
-const $fileInput = $('#file-input');
-const $fullScreenDropArea = $('#full-screen-drop-area');
-const $fileList = $('#file-list');
-const $textViewer = $('#text-viewer');
-const $voiceSelect = $('#voice-select');
-const $rateSlider = $('#rate-slider');
-const $rateDisplay = $('#rate-display');
-const $playPauseBtn = $('#play-pause-btn');
-const $sequentialReadCheckbox = $('#sequential-read-checkbox');
-const $clearAllFilesBtn = $('#clear-all-files-btn');
+// NOTE: DOMContentLoaded 시점에서 할당되므로, 임시로 전역 스코프에서 null/undefined 방지 처리
+const $ = (selector) => document.querySelector(selector); 
+let $fileInput, $fullScreenDropArea, $fileList, $textViewer, $voiceSelect, $rateSlider, $rateDisplay, $playPauseBtn;
+let $sequentialReadCheckbox, $clearAllFilesBtn;
 
-const INITIAL_TEXT_VIEWER_TEXT = '텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.';
+const INITIAL_TEXT_VIEWER_TEXT = '텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command-V) 파일을 화면에 드래그하여 업로드하세요.';
 const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
 
 // --- 초기화 ---
 document.addEventListener('DOMContentLoaded', () => {
+    // DOM 요소 재할당 (안전한 사용을 위해)
+    $fileInput = $('#file-input');
+    $fullScreenDropArea = $('#full-screen-drop-area');
+    $fileList = $('#file-list');
+    $textViewer = $('#text-viewer');
+    $voiceSelect = $('#voice-select');
+    $rateSlider = $('#rate-slider');
+    $rateDisplay = $('#rate-display');
+    $playPauseBtn = $('#play-pause-btn');
+    $sequentialReadCheckbox = $('#sequential-read-checkbox');
+    $clearAllFilesBtn = $('#clear-all-files-btn');
+    
     if (!('speechSynthesis' in window)) {
         alert('Web Speech API를 지원하지 않는 브라우저입니다.');
         return;
@@ -56,6 +61,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $rateSlider.addEventListener('input', updateRateDisplay);
     $rateSlider.addEventListener('change', () => saveBookmark());
+
+    // 목소리 변경 시 재생 중인 경우 재시작 로직 추가
+    $voiceSelect.addEventListener('change', () => {
+        saveBookmark();
+        if (isSpeaking) {
+            synth.cancel();
+            speakNextChunk();
+        }
+    });
 
     loadBookmark();
 
@@ -149,20 +163,34 @@ function populateVoiceList() {
     $voiceSelect.innerHTML = '';
 
     let koreanVoices = [];
+    let preferredVoiceName = null;
+
     voices.forEach((voice) => {
+        const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
         if (voice.lang.includes('ko')) {
-            const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
             koreanVoices.push(option);
+            // Google/Standard/Wavenet 음성을 우선 선택
+            if (voice.name.includes('Google') || voice.name.includes('Standard') || voice.name.includes('Wavenet')) {
+                preferredVoiceName = voice.name;
+            }
         }
     });
 
     koreanVoices.forEach(option => $voiceSelect.appendChild(option));
 
     const savedBookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
+    let selectedVoice = null;
+    
     if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
-        $voiceSelect.value = savedBookmark.settings.voice;
+        selectedVoice = savedBookmark.settings.voice;
+    } else if (preferredVoiceName) {
+        selectedVoice = preferredVoiceName;
     } else if (koreanVoices.length > 0) {
-        $voiceSelect.value = koreanVoices[0].value;
+        selectedVoice = koreanVoices[0].value;
+    }
+
+    if (selectedVoice) {
+         $voiceSelect.value = selectedVoice;
     }
 
     if (savedBookmark && savedBookmark.settings) {
@@ -175,13 +203,26 @@ function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
 
-// --- 파일 처리 ---
+// --- 파일 처리 및 인코딩 변환 (수정됨) ---
+/**
+ * ArrayBuffer를 TextDecoder를 사용하여 지정된 인코딩으로 디코딩합니다.
+ */
 function readTextFile(file, encoding) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
+        reader.onload = (e) => {
+            try {
+                // ArrayBuffer를 TextDecoder를 사용해 지정된 인코딩으로 변환
+                const decoder = new TextDecoder(encoding);
+                const content = decoder.decode(e.target.result);
+                resolve(content);
+            } catch (error) {
+                // 디코딩 실패 시 오류 반환
+                reject(new Error(`디코딩 오류 (${encoding}): ${error.message}`));
+            }
+        };
         reader.onerror = (e) => reject(new Error(`파일 읽기 오류: ${e.target.error.name}`));
-        reader.readAsText(file, encoding);
+        reader.readAsArrayBuffer(file); // ArrayBuffer로 읽어야 인코딩 지정 가능
     });
 }
 
@@ -204,7 +245,7 @@ async function processImageOCR(fileOrUrl) {
     }
 }
 
-// --- URL 처리 ---
+// --- URL 처리 (텍스트 추출) ---
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     const PROXY_URL = 'https://api.allorigins.win/raw?url=';
@@ -340,13 +381,14 @@ function handlePasteInTextViewer(e) {
     }, 250);
 }
 
-// --- 파일 업로드 처리 ---
+// --- 파일 업로드 처리 (수정됨) ---
 async function handleFiles(event) {
     clearInitialTextViewerContent();
     
     const newFiles = Array.from(event.target.files).filter(file => {
         const lowerName = file.name.toLowerCase();
-        return lowerName.endsWith('.txt') || IMAGE_EXTENSIONS.some(ext => lowerName.endsWith(ext));
+        const TEXT_EXTENSIONS = ['.txt'];
+        return TEXT_EXTENSIONS.some(ext => lowerName.endsWith(ext)) || IMAGE_EXTENSIONS.some(ext => lowerName.endsWith(ext));
     });
     
     if (filesData.length + newFiles.length > MAX_FILES) {
@@ -364,12 +406,32 @@ async function handleFiles(event) {
         let content = '';
         
         if (lowerName.endsWith('.txt')) {
+            // 1. UTF-8 인코딩으로 파일 읽기 시도
             try {
                 content = await readTextFile(file, 'UTF-8');
-            } catch {
-                content = await readTextFile(file, 'windows-949');
+            } catch (error) {
+                console.log(`파일 "${file.name}" UTF-8 읽기 실패. Fallback 시도.`);
+            }
+
+            // 2. 내용이 없거나 인코딩 오류 문자(\ufffd)를 포함하면 'windows-949'로 재시도
+            if (!content || content.includes('\ufffd') || content.trim().length === 0) {
+                try {
+                    content = await readTextFile(file, 'windows-949');
+                    // 재시도 후에도 오류 문자가 포함된 경우 경고
+                    if (content.includes('\ufffd')) {
+                         console.warn(`파일 "${file.name}"은(는) windows-949로도 완벽히 읽을 수 없습니다.`);
+                    } else {
+                         console.log(`파일 "${file.name}"을(를) windows-949로 성공적으로 읽었습니다.`);
+                    }
+                } catch (error) {
+                    // 최종 실패
+                    console.error(`파일 "${file.name}" 인코딩 처리 실패:`, error);
+                    alert(`파일 "${file.name}"을(를) 읽는 데 실패했습니다. 파일 인코딩을 확인해 주세요.`);
+                    return null;
+                }
             }
         } else {
+            // 이미지 파일 처리 (기존 로직 유지)
             $textViewer.innerHTML = `<p style="color:#FFD700;">[OCR 처리 중] : ${file.name}</p>`;
             content = await processImageOCR(file);
             if (!content) {
@@ -382,7 +444,7 @@ async function handleFiles(event) {
         return {
             id: fileId,
             name: file.name,
-            fullText: content,
+            fullText: content || '', // null 방지
             chunks: [],
             isProcessed: false
         };
@@ -413,16 +475,34 @@ function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || file.isProcessed) return;
 
-    const text = file.fullText;
-    const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
-    let currentChunk = '';
+    const text = file.fullText || ''; // text가 undefined일 경우 빈 문자열로 대체
+    if (!text) {
+        file.isProcessed = true;
+        file.chunks = [''];
+        console.warn(`파일 "${file.name}"의 텍스트가 비어 있습니다.`);
+        if (startReading && currentFileIndex === fileIndex) {
+            renderTextViewer(fileIndex);
+            startReadingFromCurrentChunk();
+        }
+        renderFileList();
+        return;
+    }
 
-    sentences.forEach(sentence => {
-        if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
-            file.chunks.push(currentChunk.trim());
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^\s]+/g) || [text]; // null 방지
+    let currentChunk = '';
+    file.chunks = []; // 청크 배열 초기화
+
+    sentences.forEach((sentence) => {
+        if (!sentence) return;
+
+        const newChunk = currentChunk + sentence;
+        if (newChunk.length > CHUNK_SIZE_LIMIT) {
+            if (currentChunk) {
+                file.chunks.push(currentChunk.trim());
+            }
             currentChunk = sentence;
         } else {
-            currentChunk += sentence;
+            currentChunk = newChunk;
         }
     });
 
@@ -430,7 +510,12 @@ function processFileChunks(fileIndex, startReading) {
         file.chunks.push(currentChunk.trim());
     }
 
+    if (file.chunks.length === 0 && text.length > 0) {
+        file.chunks.push(text);
+    }
+
     file.isProcessed = true;
+    console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
 
     if (startReading && currentFileIndex === fileIndex) {
         renderTextViewer(fileIndex);
@@ -474,14 +559,8 @@ function setupFullScreenDragAndDrop() {
         const files = dt.files;
 
         if (droppedText) {
-            if (IMAGE_EXTENSIONS.some(ext => droppedText.toLowerCase().endsWith(ext))) {
-                const ocrText = await processImageOCR(droppedText);
-                if (ocrText) {
-                    processPastedText(ocrText);
-                } else {
-                    alert('이미지에서 텍스트 추출 실패');
-                }
-            } else if (URL_PATTERN.test(droppedText)) {
+            // 이미지 URL 드롭은 여기서 처리 불가 (file.name이 없으므로 OCR 로직은 파일 업로드에만 집중)
+            if (URL_PATTERN.test(droppedText)) {
                 fetchAndProcessUrlContent(droppedText);
             } else {
                 processPastedText(droppedText);
@@ -497,11 +576,11 @@ function setupFullScreenDragAndDrop() {
 
 // --- 재생 컨트롤 ---
 async function startReadingFromCurrentChunk() {
-    if (currentFileIndex === -1) return;
+    if (currentFileIndex === -1 || !filesData[currentFileIndex]) return;
 
     const file = filesData[currentFileIndex];
-    if (!file || !file.isProcessed) {
-        processFileChunks(currentFileIndex, true);
+    if (!file.isProcessed || file.chunks.length === 0) {
+        if (!file.isProcessed) processFileChunks(currentFileIndex, true); // 청크 처리 재시도
         return;
     }
 
@@ -519,7 +598,7 @@ async function startReadingFromCurrentChunk() {
 
 function speakNextChunk() {
     const file = filesData[currentFileIndex];
-    if (!isSpeaking || isPaused) return;
+    if (!isSpeaking || isPaused || !file || !file.chunks || file.chunks.length === 0) return;
 
     if (currentChunkIndex >= file.chunks.length) {
         if (isSequential) {
@@ -531,8 +610,14 @@ function speakNextChunk() {
     }
 
     let textToSpeak = file.chunks[currentChunkIndex].slice(currentCharIndex);
+    if (!textToSpeak) {
+        currentChunkIndex++;
+        speakNextChunk();
+        return;
+    }
+
     currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
-    currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value);
+    currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value) || synth.getVoices()[0]; // 선택 음성 or 첫 번째 음성
     currentUtterance.rate = parseFloat($rateSlider.value);
     currentUtterance.pitch = 1;
 
@@ -550,12 +635,18 @@ function speakNextChunk() {
         }
     };
 
-    synth.speak(currentUtterance);
+    try {
+        synth.speak(currentUtterance);
+    } catch (error) {
+        console.error('음성 합성 오류:', error);
+        alert('음성 재생 중 오류가 발생했습니다. 브라우저 설정을 확인해 주세요.');
+        stopReading();
+    }
 }
 
 function togglePlayPause() {
     if (currentFileIndex === -1) {
-        alert("재생할 파일을 선택해주세요.");
+        alert("재생할 파일을 선택해 주세요.");
         return;
     }
 
@@ -610,7 +701,7 @@ function changeFile(newIndex) {
     currentCharIndex = 0;
 
     if (!filesData[newIndex].isProcessed) {
-        processFileChunks(newIndex, true);
+        processFileChunks(newIndex, isSpeaking);
     } else {
         renderTextViewer(newIndex);
         if (isSpeaking) {
