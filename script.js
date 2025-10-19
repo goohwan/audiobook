@@ -323,7 +323,7 @@ function processPastedText(text) {
 
 /**
  * 텍스트 뷰어 붙여넣기 이벤트 핸들러
- * PC와 모바일 로직을 명확히 분리하여 오류를 방지합니다.
+ * PC와 모바일 로직을 명확히 분리하여 오류를 방지하고, 모바일 추출 시 타이밍을 확보합니다.
  */
 function handlePasteInTextViewer(e) {
     // 1. 초기 안내 문구 제거를 시도합니다.
@@ -352,8 +352,11 @@ function handlePasteInTextViewer(e) {
         // DOM 업데이트를 기다린 후 텍스트를 추출합니다.
         setTimeout(() => {
             // DOM에서 텍스트를 추출하고, 불필요한 HTML과 공백을 정리합니다.
-            let extractedText = $textViewer.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
+            let extractedText = $textViewer.textContent.trim();
             
+            // 공백과 줄바꿈을 정리합니다.
+            extractedText = extractedText.replace(/(\n\s*){3,}/g, '\n\n').trim();
+
             // 추출 후 텍스트 뷰어 비우기
             $textViewer.innerHTML = '';
 
@@ -362,6 +365,8 @@ function handlePasteInTextViewer(e) {
                 const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
                 if (extractedText.replace(/\s+/g, ' ') === initialText) {
                      console.log("붙여넣기 내용이 안내 문구와 동일하여 무시됨.");
+                     // 추출에 실패하면 다시 안내 문구를 표시
+                     $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
                      return;
                 }
                 
@@ -375,7 +380,7 @@ function handlePasteInTextViewer(e) {
                 // 추출에 실패하면 다시 안내 문구를 표시
                 $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
             }
-        }, 100); // 지연 시간을 100ms로 설정
+        }, 250); // 지연 시간을 250ms로 늘려 안정성 확보
 
         return; 
     }
