@@ -76,7 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setupFileListSortable();
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // 새 기능: 웹페이지 로드 버튼 이벤트
     $loadWebPageBtn.addEventListener('click', loadWebPageImages);
 });
 
@@ -180,13 +179,26 @@ function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
 
-// --- 파일 처리 ---
+// --- 파일 처리 및 인코딩 변환 ---
 function readTextFile(file, encoding) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
+        reader.onload = (e) => {
+            let content = e.target.result;
+            // UTF-8이 아닌 경우 변환 시도
+            if (encoding !== 'UTF-8') {
+                try {
+                    const decoder = new TextDecoder(encoding);
+                    content = decoder.decode(new Uint8Array(e.target.result));
+                } catch {
+                    content = new TextDecoder('UTF-8').decode(new Uint8Array(e.target.result));
+                    console.log(`파일 "${file.name}"의 인코딩을 UTF-8로 변환했습니다.`);
+                }
+            }
+            resolve(content);
+        };
         reader.onerror = (e) => reject(new Error(`파일 읽기 오류: ${e.target.error.name}`));
-        reader.readAsText(file, encoding);
+        reader.readAsArrayBuffer(file); // ArrayBuffer로 읽어 인코딩 확인 가능
     });
 }
 
@@ -316,8 +328,9 @@ async function loadWebPageImages() {
         // 각 이미지 로드하여 height 확인
         for (const img of imgElements) {
             const src = img.src;
-            if (src) {
+            if (src && !src.startsWith('data:')) { // 데이터 URI 제외
                 const height = await getImageHeight(src);
+                console.log(`이미지 ${src} 높이: ${height}px`);
                 if (height >= 650) {
                     imageUrls.push(src);
                 }
@@ -331,11 +344,14 @@ async function loadWebPageImages() {
         // OCR 처리
         $textViewer.innerHTML = '이미지 OCR 처리 중...';
         let combinedText = '';
-        for (const imgUrl of imageUrls) {
+        for (let i = 0; i < imageUrls.length; i++) {
+            const imgUrl = imageUrls[i];
+            console.log(`OCR 처리 중: ${imgUrl}`);
             const ocrText = await processImageOCR(imgUrl);
             if (ocrText) {
                 combinedText += ocrText + '\n\n';
             }
+            console.log(`OCR 결과 (${i + 1}/${imageUrls.length}): ${ocrText.substring(0, 50)}...`);
         }
 
         if (!combinedText.trim()) {
@@ -362,6 +378,7 @@ async function loadWebPageImages() {
         $textViewer.innerHTML = '';
 
     } catch (error) {
+        console.error('웹페이지 처리 오류:', error);
         alert(`웹페이지 처리 실패: ${error.message}`);
         $textViewer.innerHTML = `<p style="color:red;">오류: ${error.message}</p>`;
     }
@@ -370,6 +387,7 @@ async function loadWebPageImages() {
 function getImageHeight(url) {
     return new Promise((resolve) => {
         const img = new Image();
+        img.crossOrigin = 'anonymous'; // CORS 문제 완화 시도
         img.onload = () => resolve(img.height);
         img.onerror = () => resolve(0);
         img.src = url;
@@ -460,8 +478,23 @@ async function handleFiles(event) {
         if (lowerName.endsWith('.txt')) {
             try {
                 content = await readTextFile(file, 'UTF-8');
-            } catch {
-                content = await readTextFile(file, 'windows-949');
+                // UTF-8이 아닌 경우 확인 후 변환
+                if (!isUTF8(content)) {
+                    const decoder = new TextDecoder('windows-949');
+                    content = decoder.decode(new Uint8Array(new TextEncoder().encode(content)));
+                    console.log(`파일 "${file.name}"의 인코딩을 UTF-8로 변환했습니다.`);
+                }
+            } catch (error) {
+                try {
+                    content = await readTextFile(file, 'windows-949');
+                    if (!isUTF8(content)) {
+                        content = new TextDecoder('UTF-8').decode(new Uint8Array(new TextEncoder().encode(content)));
+                        console.log(`파일 "${file.name}"의 인코딩을 UTF-8로 변환했습니다.`);
+                    }
+                } catch (error) {
+                    alert(`파일 "${file.name}"을(를) 읽는 데 실패했습니다. 파일 인코딩을 확인해 주세요.`);
+                    return null;
+                }
             }
         } else {
             $textViewer.innerHTML = `<p style="color:#FFD700;">[OCR 처리 중] : ${file.name}</p>`;
@@ -500,6 +533,19 @@ async function handleFiles(event) {
 
     renderFileList();
     event.target.value = '';
+}
+
+// UTF-8 여부 확인 (간단한 체크)
+function isUTF8(str) {
+    try {
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder('utf-8');
+        const encoded = encoder.encode(str);
+        decoder.decode(encoded);
+        return true;
+    } catch (e) {
+        return false;
+    }
 }
 
 // --- 청크 처리 ---
@@ -808,7 +854,7 @@ function setupFileListSortable() {
     });
 }
 
-// --- UI 렌더링 ---
+// --- UI 렌der링 ---
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
         $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
