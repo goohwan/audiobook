@@ -30,13 +30,11 @@ const $rateSlider = $('#rate-slider');
 const $rateDisplay = $('#rate-display');
 const $playPauseBtn = $('#play-pause-btn');
 
+// 기존에 있었으나 제거된 DOM 요소 관련 변수는 모두 삭제
+
 // 추가된 DOM 요소
 const $sequentialReadCheckbox = $('#sequential-read-checkbox');
 const $clearAllFilesBtn = $('#clear-all-files-btn');
-
-// 텍스트 뷰어 초기 안내문
-const INITIAL_TEXT_VIEWER_TEXT = '텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.';
-const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
 
 // --- 초기화 및 이벤트 리스너 ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -51,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     synth.onvoiceschanged = populateVoiceList;
 
     $fileInput.addEventListener('change', handleFiles);
+    // 파일 업로드 버튼은 삭제되었으므로 관련 이벤트 제거
 
     setupFullScreenDragAndDrop(); // 전역 드래그 앤 드롭 설정
 
@@ -91,16 +90,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
+// 텍스트 뷰어 초기 안내문
+const INITIAL_TEXT_VIEWER_CONTENT = '<p>텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.</p>';
+
 /**
  * 텍스트 뷰어에 포커스가 갔을 때, 초기 안내 문구라면 내용을 비웁니다.
+ * 이 함수는 모바일에서 붙여넣기 전/후의 잔여 텍스트 문제 해결에 도움을 줍니다.
  */
 function clearInitialTextViewerContent() {
-    // 텍스트 내용만을 비교
-    const currentText = $textViewer.textContent.trim().replace(/\s+/g, ' ');
-    const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
+    const currentContent = $textViewer.innerHTML.trim().toLowerCase().replace(/\s+/g, ' ');
+    const initialContent = INITIAL_TEXT_VIEWER_CONTENT.trim().toLowerCase().replace(/<\/?p>/g, '').replace(/\s+/g, ' ');
 
-    // 현재 내용이 초기 안내문과 같거나 비어있다면 내용을 비웁니다.
-    if (currentText === initialText || currentText === '') {
+    // 현재 내용이 초기 안내문과 유사하거나 비어있다면 내용을 비웁니다.
+    if (currentContent === initialContent || currentContent === '<p></p>' || currentContent === '<br>' || currentContent === '') {
         $textViewer.innerHTML = '';
     }
 }
@@ -139,7 +141,97 @@ window.addEventListener('beforeunload', () => {
     releaseWakeLock();
 });
 
-// [중략] - 목소리 및 설정, Wake Lock 기능은 변경 없음
+// --- Wake Lock API 및 NoSleep.js ---
+async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => {
+                console.log('Wake Lock released.');
+            });
+            console.log('Wake Lock requested.');
+        } catch (err) {
+            console.warn(`Wake Lock request failed: ${err.name}, ${err.message}`);
+            if (typeof NoSleep !== 'undefined') {
+                noSleep = new NoSleep();
+                noSleep.enable();
+                console.log('NoSleep enabled for screen wake.');
+            }
+        }
+    } else if (typeof NoSleep !== 'undefined') {
+        noSleep = new NoSleep();
+        noSleep.enable();
+        console.log('NoSleep enabled for screen wake.');
+    } else {
+        console.warn('Wake Lock API and NoSleep.js are not supported.');
+    }
+}
+
+function releaseWakeLock() {
+    if (wakeLock) {
+        wakeLock.release().then(() => {
+            wakeLock = null;
+            console.log('Wake Lock released successfully.');
+        }).catch((err) => {
+            console.error(`Wake Lock release failed: ${err.name}, ${err.message}`);
+        });
+    }
+    if (noSleep) {
+        noSleep.disable();
+        noSleep = null;
+        console.log('NoSleep disabled.');
+    }
+}
+
+// --- 목소리 및 설정 기능 ---
+function populateVoiceList() {
+    const voices = synth.getVoices();
+    $voiceSelect.innerHTML = '';
+
+    let koreanVoices = [];
+    let googleKoreanVoiceName = null;
+    let preferredVoiceName = null;
+    let selectedVoice = null;
+
+    voices.forEach((voice) => {
+        const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
+        if (voice.lang.includes('ko')) {
+            koreanVoices.push(option);
+            if (voice.name.includes('Google') || voice.name.includes('Standard') || voice.name.includes('Wavenet')) {
+                googleKoreanVoiceName = voice.name;
+            }
+        }
+    });
+
+    koreanVoices.forEach(option => $voiceSelect.appendChild(option));
+
+    if (googleKoreanVoiceName) {
+        preferredVoiceName = googleKoreanVoiceName;
+    } else if (koreanVoices.length > 0) {
+        preferredVoiceName = koreanVoices[0].value;
+    }
+
+    const savedBookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
+    if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
+        selectedVoice = savedBookmark.settings.voice;
+    } else if (preferredVoiceName) {
+        selectedVoice = preferredVoiceName;
+    }
+
+    if (selectedVoice) {
+        $voiceSelect.value = selectedVoice;
+    }
+
+    if (savedBookmark && savedBookmark.settings) {
+        $rateSlider.value = savedBookmark.settings.rate;
+    }
+
+    updateRateDisplay();
+}
+
+function updateRateDisplay() {
+    $rateDisplay.textContent = $rateSlider.value;
+}
 
 // --- 파일 처리 및 분할 기능 ---
 function readTextFile(file, encoding) {
@@ -167,19 +259,25 @@ async function fetchAndProcessUrlContent(url) {
         const htmlText = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
-        
+        // 기존 요소를 포함하여 넓은 범위에서 텍스트 추출 시도
         const novelContentElement = doc.getElementById('novel_content') || doc.getElementById('bo_v_con') || doc.querySelector('article') || doc.querySelector('main');
         let text = '';
         if (novelContentElement) {
+            // 태그를 포함한 텍스트에서 불필요한 공백과 줄바꿈 정리
             text = novelContentElement.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
         } else {
-            // body 텍스트에서 추출 시도 (광범위 추출)
+            // novelContentElement를 찾지 못한 경우 body 텍스트에서 추출
             text = doc.body.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
-            // 광고, 메뉴 등 불필요한 텍스트 제거 로직 추가 가능
         }
         
+        // 너무 짧은 텍스트는 안내문일 수 있으므로 최소 길이 검사
         if (text.length < 50) {
-             throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다.");
+             // 텍스트가 너무 짧고 URL이 아니면 오류로 간주하지 않고 리턴 (예: 그냥 빈 페이지)
+             if (!URL_PATTERN.test(url)) throw new Error("추출된 텍스트 내용이 너무 짧습니다.");
+             else {
+                 // URL 붙여넣기였는데 추출된 텍스트가 짧으면 오류로 처리
+                 throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다.");
+             }
         }
 
         const fileId = Date.now() + Math.floor(Math.random() * 1000000);
@@ -236,57 +334,52 @@ function processPastedText(text) {
 
 /**
  * 텍스트 뷰어 붙여넣기 이벤트 핸들러
- * 모바일 환경에서 텍스트 추출이 안정적으로 이루어지도록 로직을 보강했습니다.
+ * 모바일 붙여넣기 문제를 해결하기 위해 preventDefault()를 제거하고
+ * DOM 업데이트를 기다린 후 텍스트를 추출하도록 수정합니다.
  */
 function handlePasteInTextViewer(e) {
-    // 1. 초기 안내 문구 제거를 시도합니다.
+    // 1. 초기 안내 문구 제거
     clearInitialTextViewerContent();
     
-    let pasteData = '';
-
+    // PC 환경에서만 클립보드 데이터 접근을 시도하여 바로 처리합니다.
+    // 모바일에서는 붙여넣기를 허용하고 DOM에서 텍스트를 추출하는 방식이 더 안정적입니다.
     if (!isMobile) {
-        // PC/Web 환경: 클립보드 데이터 직접 추출이 안정적
+        // PC/Web 환경: 클립보드 데이터 직접 추출
         e.preventDefault();
-        pasteData = (e.clipboardData || window.clipboardData).getData('text');
-    } else {
-        // Mobile 환경:
-        // 기본 붙여넣기 동작을 허용한 후, DOM에서 텍스트를 추출하는 것이 안정적
-        // e.preventDefault()를 사용하지 않습니다.
-
-        // 붙여넣기를 감지하기 위해 임시 Div를 생성하여 붙여넣기를 처리할 수도 있지만,
-        // 여기서는 기존 contenteditable 요소를 사용하여 붙여넣기가 완료될 때까지 잠시 기다립니다.
+        const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+        const trimmedText = pasteData.trim();
         
-        // **중요**: 붙여넣기가 완료될 때까지 지연 시간을 줍니다.
-        setTimeout(() => {
-            // DOM에서 텍스트를 추출하고, 불필요한 HTML과 공백을 정리합니다.
-            let extractedText = $textViewer.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
-            
-            // 추출 후 텍스트 뷰어 비우기
-            $textViewer.innerHTML = '';
-
-            if (extractedText) {
-                if (URL_PATTERN.test(extractedText)) {
-                    fetchAndProcessUrlContent(extractedText);
-                } else {
-                    processPastedText(extractedText);
-                }
-            } else {
-                console.log("모바일 붙여넣기 후 텍스트 추출 실패 또는 빈 내용");
-            }
-        }, 50); // 짧은 지연 시간(50ms)을 주어 DOM 업데이트를 기다립니다.
-        
-        return; // 모바일에서는 즉시 처리하지 않고 setTimeout으로 위임하고 종료
-    }
-    
-    // PC/Web 처리
-    const trimmedText = pasteData.trim();
-    if (trimmedText) {
         if (URL_PATTERN.test(trimmedText)) {
             fetchAndProcessUrlContent(trimmedText);
         } else {
             processPastedText(trimmedText);
         }
+        return;
     }
+
+    // 2. Mobile 환경:
+    // 붙여넣기를 허용하고, DOM 업데이트 후에 텍스트를 추출합니다.
+    // (e.preventDefault()를 제거하여 기본 붙여넣기 동작을 허용)
+    
+    // 붙여넣기 직후 DOM 업데이트를 기다립니다.
+    setTimeout(() => {
+        // DOM에서 텍스트를 추출하고, 불필요한 줄 바꿈/공백을 정리합니다.
+        const currentText = $textViewer.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
+        
+        // 추출 후 텍스트 뷰어 비우기
+        $textViewer.innerHTML = '';
+
+        if (currentText) {
+            if (URL_PATTERN.test(currentText)) {
+                fetchAndProcessUrlContent(currentText);
+            } else {
+                processPastedText(currentText);
+            }
+        } else {
+            // 붙여넣기는 되었지만 텍스트가 추출되지 않은 경우 (예외 처리)
+            console.log("모바일 붙여넣기 후 텍스트 추출 실패");
+        }
+    }, 50); // 짧은 지연 시간(50ms)을 주어 DOM 업데이트를 기다립니다.
 }
 
 function handleFiles(event) {
@@ -380,38 +473,239 @@ function handleFiles(event) {
 }
 
 function processFileChunks(fileIndex, startReading) {
-    // [중략] - 청크 처리 로직 변경 없음
+    const file = filesData[fileIndex];
+    if (!file || file.isProcessed) return;
+
+    const text = file.fullText;
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
+    let currentChunk = '';
+
+    sentences.forEach(sentence => {
+        if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
+            file.chunks.push(currentChunk.trim());
+            currentChunk = sentence;
+        } else {
+            currentChunk += sentence;
+        }
+    });
+
+    if (currentChunk.trim()) {
+        file.chunks.push(currentChunk.trim());
+    }
+
+    if (file.chunks.length > 0) {
+        file.isProcessed = true;
+        console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
+    }
+
+    if (startReading && currentFileIndex === fileIndex) {
+        requestAnimationFrame(() => renderTextViewer(fileIndex));
+        startReadingFromCurrentChunk();
+    }
+
+    requestAnimationFrame(renderFileList);
 }
 
 // 전역 드래그 앤 드롭 설정 (텔레그램 스타일)
 function setupFullScreenDragAndDrop() {
-    // [중략] - 드래그 앤 드롭 로직 변경 없음
+    let dragCounter = 0; // 드래그 진입 횟수를 카운트하여 정확한 드롭존 표시/숨김 처리
+
+    document.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) { // 최상위 요소에 처음 진입했을 때만 표시
+            $fullScreenDropArea.style.display = 'flex';
+        }
+    }, false);
+
+    document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    }, false);
+
+    document.addEventListener('dragleave', (e) => {
+        dragCounter--;
+        if (dragCounter === 0) { // 모든 요소에서 벗어났을 때 숨김
+            $fullScreenDropArea.style.display = 'none';
+        }
+    }, false);
+
+    $fullScreenDropArea.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+        e.preventDefault();
+        dragCounter = 0; // 드롭하면 카운트 초기화
+        $fullScreenDropArea.style.display = 'none';
+
+        const dt = e.dataTransfer;
+        if (dt.files && dt.files.length > 0) {
+             // FileList를 받아 handleFiles를 호출합니다.
+             handleFiles({ target: { files: dt.files, value: '' } });
+        }
+    }
 }
+
 
 // --- 재생 컨트롤 기능 ---
 async function startReadingFromCurrentChunk() {
-    // [중략] - 재생 컨트롤 로직 변경 없음
+    if (currentFileIndex === -1) return;
+
+    const file = filesData[currentFileIndex];
+    if (!file || !file.isProcessed) {
+        alert(`파일 "${file.name}"을(를) 먼저 청크 처리해야 합니다. 처리를 시작합니다.`);
+        processFileChunks(currentFileIndex, true);
+        return;
+    }
+
+    currentChunkIndex = Math.min(currentChunkIndex, file.chunks.length - 1);
+    currentCharIndex = 0; // 위치 초기화
+    isSpeaking = true;
+    isPaused = false;
+    $playPauseBtn.textContent = '⏸️';
+
+    synth.cancel();
+    await requestWakeLock();
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
+    speakNextChunk();
 }
 
 function speakNextChunk() {
-    // [중략] - 재생 컨트롤 로직 변경 없음
+    const file = filesData[currentFileIndex];
+    if (!isSpeaking || isPaused) return;
+
+    if (currentChunkIndex >= file.chunks.length) {
+        if (isSequential) {
+            changeFile(currentFileIndex + 1);
+        } else {
+            stopReading();
+        }
+        return;
+    }
+
+    let textToSpeak = file.chunks[currentChunkIndex].slice(currentCharIndex);
+    currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
+    currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value);
+    currentUtterance.rate = parseFloat($rateSlider.value);
+    currentUtterance.pitch = 1;
+
+    currentUtterance.onend = () => {
+        currentCharIndex = 0;
+        currentChunkIndex++;
+        saveBookmark();
+        requestAnimationFrame(() => renderTextViewer(currentFileIndex));
+        speakNextChunk();
+    };
+
+    currentUtterance.onboundary = (event) => {
+        if (event.name === 'word') {
+            currentCharIndex = event.charIndex;
+        }
+    };
+
+    synth.speak(currentUtterance);
 }
 
 function togglePlayPause() {
-    // [중략] - 재생 컨트롤 로직 변경 없음
+    if (currentFileIndex === -1) {
+        alert("재생할 파일을 먼저 선택해주세요.");
+        return;
+    }
+
+    if (isSpeaking && !isPaused) {
+        if (isMobile) {
+            synth.cancel(); // 모바일에서 pause 대신 cancel
+        } else {
+            synth.pause();
+        }
+        isPaused = true;
+        $playPauseBtn.textContent = '▶️';
+        releaseWakeLock();
+    } else if (isSpeaking && isPaused) {
+        if (isMobile) {
+            speakNextChunk(); // 모바일에서 resume 대신 재시작 (위치 유지)
+        } else {
+            synth.resume();
+        }
+        isPaused = false;
+        $playPauseBtn.textContent = '⏸️';
+        requestWakeLock();
+    } else {
+        startReadingFromCurrentChunk();
+    }
 }
 
 function stopReading() {
-    // [중략] - 재생 컨트롤 로직 변경 없음
+    synth.cancel();
+    isSpeaking = false;
+    isPaused = false;
+    currentChunkIndex = 0;
+    currentCharIndex = 0;
+    $playPauseBtn.textContent = '▶️';
+    releaseWakeLock();
+    if (currentFileIndex !== -1) {
+        requestAnimationFrame(() => renderTextViewer(currentFileIndex));
+    }
 }
 
 function changeFile(newIndex) {
-    // [중략] - 재생 컨트롤 로직 변경 없음
+    if (newIndex < 0 || newIndex >= filesData.length) {
+        alert("더 이상 읽을 파일이 없습니다.");
+        stopReading();
+        currentFileIndex = -1;
+        requestAnimationFrame(() => renderTextViewer(-1));
+        return;
+    }
+
+    synth.cancel();
+    currentFileIndex = newIndex;
+    currentChunkIndex = 0;
+    currentCharIndex = 0;
+
+    if (!filesData[newIndex].isProcessed) {
+        processFileChunks(newIndex, true);
+    } else {
+        requestAnimationFrame(() => renderTextViewer(newIndex));
+        if (isSpeaking) {
+            startReadingFromCurrentChunk();
+        }
+    }
 }
 
 // --- 파일 목록 관리 기능 ---
 function handleFileListItemClick(e) {
-    // [중략] - 파일 목록 관리 로직 변경 없음
+    const li = e.target.closest('li');
+    if (!li) return;
+
+    const fileId = parseInt(li.dataset.fileId);
+    const fileIndex = filesData.findIndex(f => f.id === fileId);
+    if (fileIndex === -1) return;
+
+    if (e.target.classList.contains('delete-file-btn')) {
+        e.stopPropagation();
+        deleteFile(fileIndex);
+        return;
+    }
+
+    if (e.target.classList.contains('drag-handle')) {
+        return;
+    }
+
+    if (isSpeaking || isPaused) {
+        stopReading();
+    }
+
+    currentFileIndex = fileIndex;
+    currentChunkIndex = 0;
+    currentCharIndex = 0;
+
+    if (!filesData[currentFileIndex].isProcessed) {
+        processFileChunks(currentFileIndex, true);
+    } else {
+        startReadingFromCurrentChunk();
+    }
+
+    requestAnimationFrame(renderFileList);
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
 }
 
 function deleteFile(index) {
@@ -434,7 +728,7 @@ function deleteFile(index) {
     saveBookmark();
 
     if (filesData.length === 0) {
-        $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT; // 상수 사용
+        $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
         currentFileIndex = -1;
     }
 }
@@ -450,18 +744,42 @@ function clearAllFiles() {
     currentCharIndex = 0;
     localStorage.removeItem('autumnReaderBookmark');
     requestAnimationFrame(renderFileList);
-    $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT; // 상수 사용
+    $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
 }
 
 function setupFileListSortable() {
-    // [중략] - 파일 목록 정렬 로직 변경 없음
+    if (typeof Sortable === 'undefined') {
+        return;
+    }
+
+    new Sortable($fileList, {
+        handle: '.drag-handle',
+        animation: 150,
+        onEnd: function (evt) {
+            const oldIndex = evt.oldIndex;
+            const newIndex = evt.newIndex;
+            const [movedItem] = filesData.splice(oldIndex, 1);
+            filesData.splice(newIndex, 0, movedItem);
+
+            if (currentFileIndex === oldIndex) {
+                currentFileIndex = newIndex;
+            } else if (oldIndex < currentFileIndex && newIndex >= currentFileIndex) {
+                currentFileIndex--;
+            } else if (oldIndex > currentFileIndex && newIndex <= currentFileIndex) {
+                currentFileIndex++;
+            }
+
+            requestAnimationFrame(renderFileList);
+            saveBookmark();
+        },
+    });
 }
 
 // --- UI 및 북마크 기능 ---
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
         // 파일이 없을 경우 초기 안내 문구 표시
-        $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT; // 상수 사용
+        $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
         return;
     }
 
@@ -470,29 +788,136 @@ function renderTextViewer(fileIndex) {
         $textViewer.innerHTML = `<p style="color:#FFD700;">[파일 로딩 중/청크 처리 중] : ${file.name}</p>`;
         return;
     }
-    // [중략] - 텍스트 뷰어 렌더링 로직 변경 없음
+
+    const startIndex = Math.max(0, currentChunkIndex - Math.floor(VISIBLE_CHUNKS / 2));
+    const endIndex = Math.min(file.chunks.length, startIndex + VISIBLE_CHUNKS);
+    let htmlContent = '';
+
+    for (let i = startIndex; i < endIndex; i++) {
+        let chunkHtml = file.chunks[i].replace(/\n/g, '<br>');
+        const isCurrentChunk = i === currentChunkIndex && (isSpeaking || isPaused);
+        htmlContent += `<span class="text-chunk ${isCurrentChunk ? 'highlight' : ''}" data-index="${i}">${chunkHtml}</span>`;
+    }
+
+    $textViewer.innerHTML = htmlContent;
+
+    if (isSpeaking || isPaused) {
+        setTimeout(scrollToCurrentChunk, 100);
+    }
 }
 
 function scrollToCurrentChunk() {
-    // [중략] - 스크롤 로직 변경 없음
+    const highlighted = $('.highlight');
+    if (highlighted) {
+        highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 }
 
 function setupTextViewerClickEvent() {
-    // [중략] - 텍스트 뷰어 클릭 이벤트 로직 변경 없음
+    $textViewer.addEventListener('click', (e) => {
+        // contenteditable 모드에서는 텍스트 선택이 우선되므로, 클릭 이벤트는
+        // 텍스트를 로드하지 않은 상태에서만 동작하도록 로직을 보호합니다.
+        if (filesData.length === 0) return;
+
+        const chunkElement = e.target.closest('.text-chunk');
+        if (!chunkElement) return;
+
+        if (chunkElement.classList.contains('highlight')) {
+            return;
+        }
+
+        const newChunkIndex = parseInt(chunkElement.dataset.index);
+        if (isNaN(newChunkIndex)) return;
+
+        jumpToChunk(newChunkIndex);
+    });
 }
 
 function jumpToChunk(index) {
-    // [중략] - 청크 이동 로직 변경 없음
+    if (currentFileIndex === -1 || index >= filesData[currentFileIndex].chunks.length) return;
+
+    synth.cancel();
+    currentChunkIndex = index;
+    currentCharIndex = 0;
+    isSpeaking = true;
+    isPaused = false;
+    $playPauseBtn.textContent = '⏸️';
+
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
+    requestWakeLock();
+    speakNextChunk();
 }
 
 function renderFileList() {
-    // [중략] - 파일 목록 렌더링 로직 변경 없음
+    $fileList.innerHTML = '';
+    filesData.forEach((file, index) => {
+        const li = document.createElement('li');
+        li.dataset.fileId = file.id;
+
+        const fileNameSpan = document.createElement('span');
+        fileNameSpan.textContent = file.name;
+        fileNameSpan.classList.add('file-item-name');
+
+        const controlsDiv = document.createElement('div');
+        controlsDiv.classList.add('file-controls');
+
+        const dragHandle = document.createElement('button');
+        dragHandle.innerHTML = '☰';
+        dragHandle.classList.add('drag-handle');
+        dragHandle.title = '순서 변경';
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.innerHTML = 'X';
+        deleteBtn.classList.add('delete-file-btn');
+        deleteBtn.title = '파일 삭제';
+
+        if (!file.isProcessed) {
+            const statusSpan = document.createElement('span');
+            statusSpan.textContent = ' (⏳ 대기)';
+            statusSpan.style.color = '#FFD700';
+            fileNameSpan.appendChild(statusSpan);
+        }
+
+        controlsDiv.appendChild(dragHandle);
+        controlsDiv.appendChild(deleteBtn);
+
+        li.appendChild(fileNameSpan);
+        li.appendChild(controlsDiv);
+
+        li.classList.toggle('active', index === currentFileIndex);
+
+        $fileList.appendChild(li);
+    });
 }
 
 function saveBookmark() {
-    // [중략] - 북마크 저장 로직 변경 없음
+    if (currentFileIndex === -1) return;
+
+    const bookmarkData = {
+        fileId: filesData[currentFileIndex].id,
+        fileName: filesData[currentFileIndex].name,
+        chunkIndex: currentChunkIndex,
+        isSequential: isSequential,
+        settings: {
+            voice: $voiceSelect.value,
+            rate: $rateSlider.value
+        }
+    };
+    localStorage.setItem('autumnReaderBookmark', JSON.stringify(bookmarkData));
 }
 
 function loadBookmark() {
-    // [중략] - 북마크 로드 로직 변경 없음
+    const data = localStorage.getItem('autumnReaderBookmark');
+    if (!data) return;
+
+    const bookmark = JSON.parse(data);
+    if (bookmark.settings) {
+        $rateSlider.value = bookmark.settings.rate;
+        updateRateDisplay();
+    }
+
+    isSequential = bookmark.isSequential !== undefined ? bookmark.isSequential : true;
+    if ($sequentialReadCheckbox) {
+        $sequentialReadCheckbox.checked = isSequential;
+    }
 }
