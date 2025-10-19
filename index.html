@@ -42,12 +42,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="description" content="텍스트or이미지 파일을 업로드하여 오디오북으로 변환하는 서비스입니다.">
+    <meta name="description" content="파일(텍스트,이미지)을 업로드하여 오디오북으로 변환하는 서비스입니다.">
     <title>책 읽어주는 가을이</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/nosleep.js@1/dist/NoSleep.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script> 
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
 </head>
 <body>
@@ -55,13 +54,13 @@
 
     <header>
         <h1>책 읽어주는 가을이</h1>
-        <p>텍스트 또는 이미지 파일을 드래그하거나 아래 뷰어에 텍스트/URL을 붙여넣어 오디오북으로 변환하세요!</p>
+        <p>텍스트or이미지 파일을 드래그하거나 아래 뷰어에 텍스트/URL을 붙여넣어 오디오북으로 변환하세요!</p>
     </header>
     <div class="container">
         <div id="left_pannel">
             <div class="file-list-section">
                 <h2>업로드된 파일</h2>
-                <input type="file" id="file-input" accept=".txt,image/*" multiple style="display: none;">
+                <input type="file" id="file-input" accept=".txt, .jpg, .jpeg, .png" multiple style="display: none;">
                 <ul id="file-list"></ul>
             </div>
 
@@ -110,6 +109,7 @@
         })();
     </script>
     <script id="dsq-count-scr" src="//gbookreader.disqus.com/count.js" async></script>
+    <script src='https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js'></script>
     <script src="script.js"></script>
 </body>
 </html>
