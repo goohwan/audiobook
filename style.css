@@ -8,26 +8,21 @@ body {
 }
 
 .container {    
-    /* flex 제거 및 1열 배치 */
     display: block; 
     width: 100%;
-    max-width: 800px; /* 적당한 최대 폭으로 조정 (텍스트 뷰어 폭과 동일하게) */
+    max-width: 800px;
     margin: 0 auto;
 }
 
 #left_pannel {   
-    /* left_pannel이 컨테이너의 폭 전체를 사용하도록 수정 */
     width: 100%; 
-    padding: 0; /* 컨테이너에 이미 패딩이 있으므로 0으로 조정 */
+    padding: 0;
     box-sizing: border-box;
 }
 
-/* right_pannel 관련 스타일 제거 */
-/* #right_pannel 스타일 제거 */
-
 #disqus_thread {
-    min-height: 200px; /* Disqus 영역 최소 높이 */
-    margin-top: 20px; /* 텍스트 뷰어와의 간격 */
+    min-height: 200px;
+    margin-top: 20px;
 }
 
 header {
@@ -39,11 +34,10 @@ h1 {
     color: #FFD700;
 }
 
-.file-list-section, .text-viewer-section, .control-section, .disqus-section { /* disqus-section 추가 */
+.file-list-section, .text-viewer-section, .control-section, .disqus-section {
     margin-bottom: 20px;
 }
 
-/* 전역 드롭존 스타일 (이전과 동일) */
 #full-screen-drop-area {
     position: fixed;
     top: 0;
@@ -53,7 +47,7 @@ h1 {
     background-color: rgba(0, 0, 0, 0.8);
     color: #FFD700;
     z-index: 1000;
-    display: none; /* 기본 숨김 */
+    display: none;
     justify-content: center;
     align-items: center;
     font-size: 2em;
@@ -66,17 +60,13 @@ h1 {
     display: flex;
     align-items: center;
     gap: 10px;
-    /* 줄바꿈을 허용하여 가로폭 초과 시 다음 줄로 이동 */
     flex-wrap: wrap; 
 }
 
-/* 재생 관련 버튼 그룹 스타일 추가 */
 .playback-controls {
     display: flex;
     gap: 0;
-    /* control-section의 gap과 구분되도록 약간의 마진 */
     margin-right: 10px;
-    /* 버튼 묶음 전체에 둥근 모서리 및 오버플로우 숨김 처리 */
     border-radius: 5px; 
     overflow: hidden; 
 }
@@ -88,7 +78,6 @@ h1 {
     color: #e0e0e0;
 }
 
-/* 그룹에 속한 버튼들의 공통 스타일 */
 .playback-controls button, #clear-all-files-btn {
     background-color: #FFD700;
     border: none;
@@ -96,12 +85,10 @@ h1 {
     cursor: pointer;
 }
 
-/* 그룹에 속한 버튼들은 둥근 모서리를 제거 */
 .playback-controls button {
     border-radius: 0;
 }
 
-/* 그룹에 속하지 않는 전체 삭제 버튼만 둥근 모서리 유지 */
 #clear-all-files-btn {
     border-radius: 5px;
 }
