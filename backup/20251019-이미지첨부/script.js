@@ -175,26 +175,13 @@ function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
 
-// --- 파일 처리 및 인코딩 변환 ---
+// --- 파일 처리 ---
 function readTextFile(file, encoding) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (e) => {
-            let content = e.target.result;
-            // UTF-8이 아닌 경우 변환 시도
-            if (encoding !== 'UTF-8') {
-                try {
-                    const decoder = new TextDecoder(encoding);
-                    content = decoder.decode(new Uint8Array(e.target.result));
-                } catch {
-                    content = new TextDecoder('UTF-8').decode(new Uint8Array(e.target.result));
-                    console.log(`파일 "${file.name}"의 인코딩을 UTF-8로 변환했습니다.`);
-                }
-            }
-            resolve(content);
-        };
+        reader.onload = (e) => resolve(e.target.result);
         reader.onerror = (e) => reject(new Error(`파일 읽기 오류: ${e.target.error.name}`));
-        reader.readAsArrayBuffer(file); // ArrayBuffer로 읽어 인코딩 확인 가능
+        reader.readAsText(file, encoding);
     });
 }
 
@@ -217,7 +204,7 @@ async function processImageOCR(fileOrUrl) {
     }
 }
 
-// --- URL 처리 (텍스트 추출) ---
+// --- URL 처리 ---
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     const PROXY_URL = 'https://api.allorigins.win/raw?url=';
@@ -379,23 +366,8 @@ async function handleFiles(event) {
         if (lowerName.endsWith('.txt')) {
             try {
                 content = await readTextFile(file, 'UTF-8');
-                // UTF-8이 아닌 경우 확인 후 변환
-                if (!isUTF8(content)) {
-                    const decoder = new TextDecoder('windows-949');
-                    content = decoder.decode(new Uint8Array(new TextEncoder().encode(content)));
-                    console.log(`파일 "${file.name}"의 인코딩을 UTF-8로 변환했습니다.`);
-                }
-            } catch (error) {
-                try {
-                    content = await readTextFile(file, 'windows-949');
-                    if (!isUTF8(content)) {
-                        content = new TextDecoder('UTF-8').decode(new Uint8Array(new TextEncoder().encode(content)));
-                        console.log(`파일 "${file.name}"의 인코딩을 UTF-8로 변환했습니다.`);
-                    }
-                } catch (error) {
-                    alert(`파일 "${file.name}"을(를) 읽는 데 실패했습니다. 파일 인코딩을 확인해 주세요.`);
-                    return null;
-                }
+            } catch {
+                content = await readTextFile(file, 'windows-949');
             }
         } else {
             $textViewer.innerHTML = `<p style="color:#FFD700;">[OCR 처리 중] : ${file.name}</p>`;
@@ -436,48 +408,26 @@ async function handleFiles(event) {
     event.target.value = '';
 }
 
-// UTF-8 여부 확인 (간단한 체크)
-function isUTF8(str) {
-    try {
-        const encoder = new TextEncoder();
-        const decoder = new TextDecoder('utf-8');
-        const encoded = encoder.encode(str);
-        decoder.decode(encoded);
-        return true;
-    } catch (e) {
-        return false;
-    }
-}
-
 // --- 청크 처리 ---
 function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || file.isProcessed) return;
 
-    const text = file.fullText || '';
-    const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^\s]+/g) || [text];
+    const text = file.fullText;
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
     let currentChunk = '';
 
-    sentences.forEach((sentence, index) => {
-        if (!sentence) return;
-
-        const newChunk = currentChunk + sentence;
-        if (newChunk.length > CHUNK_SIZE_LIMIT) {
-            if (currentChunk) {
-                file.chunks.push(currentChunk.trim());
-            }
+    sentences.forEach(sentence => {
+        if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
+            file.chunks.push(currentChunk.trim());
             currentChunk = sentence;
         } else {
-            currentChunk = newChunk;
+            currentChunk += sentence;
         }
     });
 
     if (currentChunk.trim()) {
         file.chunks.push(currentChunk.trim());
-    }
-
-    if (file.chunks.length === 0 && text.length > 0) {
-        file.chunks.push(text);
     }
 
     file.isProcessed = true;
@@ -550,9 +500,8 @@ async function startReadingFromCurrentChunk() {
     if (currentFileIndex === -1) return;
 
     const file = filesData[currentFileIndex];
-    if (!file || !file.isProcessed || file.chunks.length === 0) {
-        console.log(`재생 시작 실패 - 파일: ${file?.name}, 상태: ${file?.isProcessed}, 청크 수: ${file?.chunks?.length}`);
-        alert("재생할 수 있는 텍스트가 없습니다. 파일을 확인해주세요.");
+    if (!file || !file.isProcessed) {
+        processFileChunks(currentFileIndex, true);
         return;
     }
 
@@ -570,7 +519,7 @@ async function startReadingFromCurrentChunk() {
 
 function speakNextChunk() {
     const file = filesData[currentFileIndex];
-    if (!isSpeaking || isPaused || !file || !file.chunks || file.chunks.length === 0) return;
+    if (!isSpeaking || isPaused) return;
 
     if (currentChunkIndex >= file.chunks.length) {
         if (isSequential) {
@@ -582,12 +531,6 @@ function speakNextChunk() {
     }
 
     let textToSpeak = file.chunks[currentChunkIndex].slice(currentCharIndex);
-    if (!textToSpeak) {
-        currentChunkIndex++;
-        speakNextChunk();
-        return;
-    }
-
     currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
     currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value);
     currentUtterance.rate = parseFloat($rateSlider.value);
@@ -607,13 +550,7 @@ function speakNextChunk() {
         }
     };
 
-    try {
-        synth.speak(currentUtterance);
-    } catch (error) {
-        console.error('음성 합성 오류:', error);
-        alert('음성 재생 중 오류가 발생했습니다. 브라우저 설정을 확인해주세요.');
-        stopReading();
-    }
+    synth.speak(currentUtterance);
 }
 
 function togglePlayPause() {
@@ -777,7 +714,7 @@ function setupFileListSortable() {
     });
 }
 
-// --- UI 렌der링 ---
+// --- UI 렌더링 ---
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
         $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
