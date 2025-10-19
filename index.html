@@ -28,7 +28,7 @@
 
                 // Convert filtered JSON back to CSV
                 var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                csv = XLSX.utils.utils.sheet_to_csv(csv, { header: 1 });
                 return csv;
             } catch (e) {
                 console.error(e);
@@ -50,17 +50,35 @@
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
 </head>
 <body>
-    <div id="full-screen-drop-area">파일을 여기에 드롭하세요</div>
-
     <header>
         <h1>책 읽어주는 가을이</h1>
-        <p>텍스트 파일을 드래그하거나 아래 뷰어에 텍스트/URL을 붙여넣어 오디오북으로 변환하세요!</p>
+        <p>텍스트 파일을 업로드하여 오디오북으로 변환하세요!</p>
     </header>
     <div class="container">
         <div id="left_pannel">
+            <div class="upload-section">
+                <div id="drop-area">
+                    <p>여기에 텍스트 파일을 드래그하거나</p>
+                    <button id="file-upload-btn">파일 업로드</button>
+                    <input type="file" id="file-input" accept=".txt" multiple style="display: none;">
+                </div>
+                <div class="url-section">
+                    <input type="text" id="url-text-input" placeholder="웹페이지 URL 입력 (ID: novel_content 또는 bo_v_con)">
+                    <button id="load-url-btn" class="pc-only-btn">URL 로드</button>
+                </div>
+                <div class="clipboard-section">
+                    <textarea id="clipboard-text-input" placeholder="텍스트를 여기에 붙여넣기"></textarea>
+                    <button id="load-clipboard-btn" class="pc-only-btn">텍스트 로드</button>
+                </div>
+                
+                <div id="mobile-only-load-area" class="mobile-only-load-area">
+                    <button id="mobile-load-btn">음성로드</button>
+                </div>
+
+            </div>
+
             <div class="file-list-section">
                 <h2>업로드된 파일</h2>
-                <input type="file" id="file-input" accept=".txt" multiple style="display: none;">
                 <ul id="file-list"></ul>
             </div>
 
@@ -79,20 +97,17 @@
             </div>
 
             <div class="text-viewer-section">
-                <h2>텍스트 뷰어 (여기에 텍스트나 URL을 붙여넣으세요)</h2>
-                <div id="text-viewer" contenteditable="true">
-                    <p>텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.</p>
+                <h2>텍스트 뷰어</h2>
+                <div id="text-viewer">
+                    <p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>
                 </div>
             </div>
-            
-            <div class="disqus-section">
-                <h2>대화</h2>
-                <div id="disqus_thread"></div>
-                <noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
-            </div>
         </div>
-        
+        <div id="right_pannel">
+            <div id="disqus_thread"></div>
+            <noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
         </div>    
+    </div>    
     <script>
         /**
          * Disqus configuration

@@ -8,26 +8,29 @@ body {
 }
 
 .container {    
-    /* flex 제거 및 1열 배치 */
-    display: block; 
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 20px;
     width: 100%;
-    max-width: 800px; /* 적당한 최대 폭으로 조정 (텍스트 뷰어 폭과 동일하게) */
+    max-width: 1200px;
     margin: 0 auto;
 }
 
 #left_pannel {   
-    /* left_pannel이 컨테이너의 폭 전체를 사용하도록 수정 */
-    width: 100%; 
-    padding: 0; /* 컨테이너에 이미 패딩이 있으므로 0으로 조정 */
+    flex: 1 1 500px;
+    padding: 20px;
     box-sizing: border-box;
 }
 
-/* right_pannel 관련 스타일 제거 */
-/* #right_pannel 스타일 제거 */
+#right_pannel {   
+    flex: 1 1 300px;    
+    padding: 20px;
+    box-sizing: border-box;
+}
 
 #disqus_thread {
     min-height: 200px; /* Disqus 영역 최소 높이 */
-    margin-top: 20px; /* 텍스트 뷰어와의 간격 */
 }
 
 header {
@@ -39,35 +42,70 @@ h1 {
     color: #FFD700;
 }
 
-.file-list-section, .text-viewer-section, .control-section, .disqus-section { /* disqus-section 추가 */
+.upload-section, .control-section, .file-list-section, .text-viewer-section {
     margin-bottom: 20px;
 }
 
-/* 전역 드롭존 스타일 (이전과 동일) */
-#full-screen-drop-area {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
-    color: #FFD700;
-    z-index: 1000;
-    display: none; /* 기본 숨김 */
-    justify-content: center;
-    align-items: center;
-    font-size: 2em;
-    border: 5px dashed #FFD700;
-    pointer-events: auto;
+#drop-area {
+    border: 2px dashed #666;
+    padding: 20px;
     text-align: center;
+    background-color: #3a3a3a;
+    cursor: pointer;
+    position: relative;
+    z-index: 10; /* 이벤트 차단 방지 */
+    pointer-events: auto;
 }
 
+#drop-area.active {
+    background-color: #4a4a4a;
+}
+
+#file-upload-btn, #load-url-btn, #load-clipboard-btn, #clear-all-files-btn {
+    background-color: #FFD700;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    margin-top: 10px;
+    border-radius: 5px;
+    position: relative;
+    z-index: 10; /* 이벤트 차단 방지 */
+    pointer-events: auto;
+}
+
+#file-upload-btn:hover, #load-url-btn:hover, #load-clipboard-btn:hover, #clear-all-files-btn:hover {
+    background-color: #FFC107;
+}
+
+#url-text-input, #clipboard-text-input {
+    width: 100%;
+    padding: 10px;
+    margin-top: 10px;
+    background-color: #4a4a4a;
+    border: 1px solid #666;
+    color: #e0e0e0;
+    border-radius: 5px;
+}
+
+#clipboard-text-input {
+    height: 100px;
+    resize: vertical;
+}
+
+/* --- [수정] 컨트롤 섹션 반응형 디자인 (가로 한 줄 유지) --- */
 .control-section {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-wrap: wrap;
+    /* flex-wrap: wrap; <-- 제거됨 */
+    white-space: nowrap; /* 요소가 한 줄에 있도록 강제 */
+    overflow-x: auto; /* 내용이 넘칠 경우 가로 스크롤 허용 */
+    padding-bottom: 5px; /* 스크롤바를 위한 공간 */
 }
+.control-section > * {
+    flex-shrink: 0; /* 개별 요소가 축소되는 것을 방지 */
+}
+/* ------------------------------------------------ */
 
 #voice-select, #rate-slider {
     padding: 5px;
@@ -76,7 +114,7 @@ h1 {
     color: #e0e0e0;
 }
 
-#play-pause-btn, #stop-btn, #prev-file-btn, #next-file-btn, #clear-all-files-btn {
+#play-pause-btn, #stop-btn, #prev-file-btn, #next-file-btn {
     background-color: #FFD700;
     border: none;
     padding: 10px;
@@ -84,7 +122,7 @@ h1 {
     border-radius: 5px;
 }
 
-#play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover, #clear-all-files-btn:hover {
+#play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover {
     background-color: #FFC107;
 }
 
@@ -140,7 +178,6 @@ h1 {
     border-radius: 5px;
     max-height: 400px;
     overflow-y: auto;
-    min-height: 100px; 
 }
 
 .text-chunk {
@@ -158,13 +195,36 @@ h1 {
     color: #2c2c2c;
 }
 
-@media (max-width: 450px) {
-    .container {
-        max-width: 100%;
-        padding: 10px;
+/* --- [추가] 모바일/PC 버튼 표시 제어 --- */
+.mobile-only-load-area {
+    margin-top: 10px;
+    display: none; /* PC에서는 숨김 */
+}
+
+@media (max-width: 600px) {
+    .pc-only-btn {
+        display: none !important; /* 모바일에서 PC 버튼 숨김 */
+    }
+    .mobile-only-load-area {
+        display: block; /* 모바일에서 모바일 로드 버튼 영역 표시 */
+    }
+    #mobile-load-btn {
+        width: 100%;
+        background-color: #FFD700;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+        border-radius: 5px;
     }
 
-    #left_pannel {
-        padding: 0;
+    .container {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    #left_pannel, #right_pannel {
+        flex-basis: 100%;
+        min-width: auto;
     }
 }
+/* -------------------------------------- */

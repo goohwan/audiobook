@@ -2,7 +2,6 @@
 const MAX_FILES = 50; // 파일 첨부 최대 개수 50개
 const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수
 const VISIBLE_CHUNKS = 10; // 가상화: 한 번에 렌더링할 청크 수
-const URL_PATTERN = /^(http|https):\/\/[^\s$.?#].[^\s]*$/i; // URL 인식 패턴
 
 let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
@@ -21,8 +20,8 @@ let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent); // 모바일 �
 
 // DOM 요소 캐시
 const $ = (selector) => document.querySelector(selector);
-const $fileInput = $('#file-input'); // 숨겨진 파일 인풋 (프로그래밍 방식으로 사용)
-const $fullScreenDropArea = $('#full-screen-drop-area'); // 새로 추가된 전역 드롭존
+const $fileInput = $('#file-input');
+const $dropArea = $('#drop-area');
 const $fileList = $('#file-list');
 const $textViewer = $('#text-viewer');
 const $voiceSelect = $('#voice-select');
@@ -31,12 +30,15 @@ const $rateDisplay = $('#rate-display');
 const $playPauseBtn = $('#play-pause-btn');
 
 // 추가된 DOM 요소
+const $clipboardTextInput = $('#clipboard-text-input');
+const $loadClipboardBtn = $('#load-clipboard-btn');
+const $urlTextInput = $('#url-text-input');
+const $loadUrlBtn = $('#load-url-btn');
 const $sequentialReadCheckbox = $('#sequential-read-checkbox');
 const $clearAllFilesBtn = $('#clear-all-files-btn');
+// [추가] 모바일 전용 로드 버튼
+const $mobileLoadBtn = $('#mobile-load-btn');
 
-// 텍스트 뷰어 초기 안내문
-const INITIAL_TEXT_VIEWER_TEXT = '텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.';
-const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
 
 // --- 초기화 및 이벤트 리스너 ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -51,8 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
     synth.onvoiceschanged = populateVoiceList;
 
     $fileInput.addEventListener('change', handleFiles);
+    $('#file-upload-btn').addEventListener('click', () => {
+        console.log('File upload button clicked');
+        $fileInput.click();
+    });
 
-    setupFullScreenDragAndDrop(); // 전역 드래그 앤 드롭 설정
+    setupDragAndDrop();
 
     $('#play-pause-btn').addEventListener('click', togglePlayPause);
     $('#stop-btn').addEventListener('click', stopReading);
@@ -65,10 +71,13 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBookmark();
 
     setupTextViewerClickEvent();
-    $textViewer.addEventListener('paste', handlePasteInTextViewer); // 텍스트 뷰어에 paste 이벤트 추가
+
+    // PC 전용 버튼 이벤트는 유지 (CSS로 모바일에서 숨김 처리됨)
+    $loadClipboardBtn.addEventListener('click', handleClipboardText);
+    $loadUrlBtn.addEventListener('click', handleUrlText);
     
-    // 텍스트 뷰어에 포커스 되었을 때 안내문 자동 제거
-    $textViewer.addEventListener('focus', clearInitialTextViewerContent);
+    // [추가] 모바일 전용 로드 버튼 이벤트
+    $mobileLoadBtn.addEventListener('click', handleMobileLoadButtonClick);
 
 
     $sequentialReadCheckbox.addEventListener('change', (e) => {
@@ -90,21 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 모바일 백그라운드 재생 및 화면 켜둠
     document.addEventListener('visibilitychange', handleVisibilityChange);
 });
-
-/**
- * 텍스트 뷰어에 포커스가 갔을 때, 초기 안내 문구라면 내용을 비웁니다.
- */
-function clearInitialTextViewerContent() {
-    // 텍스트 내용만을 비교
-    const currentText = $textViewer.textContent.trim().replace(/\s+/g, ' ');
-    const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
-
-    // 현재 내용이 초기 안내문과 같거나 비어있다면 내용을 비웁니다.
-    if (currentText === initialText || currentText === '') {
-        $textViewer.innerHTML = '';
-    }
-}
-
 
 async function handleVisibilityChange() {
     if (document.visibilityState === 'hidden') {
@@ -247,32 +241,29 @@ function readTextFile(file, encoding) {
 
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
-    // URL 처리를 위해 프록시 사용 (CORS 회피)
     const PROXY_URL = 'https://api.allorigins.win/raw?url=';
     const targetUrl = PROXY_URL + encodeURIComponent(url);
     try {
-        $textViewer.innerHTML = '웹페이지 콘텐츠를 불러오는 중입니다...';
+        $textViewer.innerHTML = '<p>웹페이지 콘텐츠를 불러오는 중입니다...</p>';
         stopReading();
         const response = await fetch(targetUrl);
         if (!response.ok) throw new Error(`HTTP 오류: ${response.status}`);
         const htmlText = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
-        
-        const novelContentElement = doc.getElementById('novel_content') || doc.getElementById('bo_v_con') || doc.querySelector('article') || doc.querySelector('main');
+        const novelContentElement = doc.getElementById('novel_content') || doc.getElementById('bo_v_con');
         let text = '';
         if (novelContentElement) {
-            text = novelContentElement.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
+            const pTags = novelContentElement.querySelectorAll('p');
+            text = Array.from(pTags).map(p => p.textContent.trim()).join('\n');
+            text = text.trim();
         } else {
-            text = doc.body.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
+            throw new Error("페이지에서 ID 'novel_content' 또는 'bo_v_con' 요소를 찾을 수 없습니다.");
         }
-        
-        if (text.length < 50) {
-             throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다.");
-        }
+        if (text.length < 50) throw new Error("추출된 텍스트 내용이 너무 짧습니다.");
 
         const fileId = Date.now() + Math.floor(Math.random() * 1000000);
-        const fileName = `[URL] ${url.substring(0, 50).replace(/(\/|\?)/g, ' ')}...`;
+        const fileName = `[URL] ${url.substring(0, 30)}...`;
         const newFileData = {
             id: fileId,
             name: fileName,
@@ -287,7 +278,7 @@ async function fetchAndProcessUrlContent(url) {
         currentFileIndex = 0;
         processFileChunks(0, true);
 
-        $textViewer.innerHTML = '';
+        $urlTextInput.value = '';
     } catch (error) {
         alert(`URL 로드 실패: ${error.message}.`);
         $textViewer.innerHTML = `<p style="color:red;">오류 발생: ${error.message}</p>`;
@@ -295,13 +286,24 @@ async function fetchAndProcessUrlContent(url) {
     }
 }
 
-function processPastedText(text) {
+function handleUrlText() {
+    const url = $urlTextInput.value.trim();
+    if (url) {
+        fetchAndProcessUrlContent(url);
+    } else {
+        alert("URL을 입력해주세요.");
+    }
+}
+
+function handleClipboardText() {
+    const text = $clipboardTextInput.value.trim();
     if (!text) {
+        alert("붙여넣기할 텍스트가 없습니다.");
         return;
     }
 
     const fileId = Date.now() + Math.floor(Math.random() * 1000000);
-    const fileName = `[클립보드] ${new Date().toLocaleTimeString()} - ${text.substring(0, 20)}...`;
+    const fileName = `[클립보드] ${new Date().toLocaleTimeString()}`;
 
     const newFileData = {
         id: fileId,
@@ -317,80 +319,32 @@ function processPastedText(text) {
     renderFileList();
     currentFileIndex = 0;
     processFileChunks(0, true);
-    
-    $textViewer.innerHTML = '';
+
+    $clipboardTextInput.value = '';
 }
 
-/**
- * 텍스트 뷰어 붙여넣기 이벤트 핸들러
- * PC와 모바일 로직을 명확히 분리하여 오류를 방지하고, 모바일 추출 시 타이밍을 확보합니다.
- */
-function handlePasteInTextViewer(e) {
-    // 1. 초기 안내 문구 제거를 시도합니다.
-    clearInitialTextViewerContent();
-    
-    let pasteData = '';
+// [추가] 모바일 전용 로드 버튼 핸들러
+function handleMobileLoadButtonClick() {
+    const url = $urlTextInput.value.trim();
+    const text = $clipboardTextInput.value.trim();
 
-    if (!isMobile) {
-        // **PC/Web 환경:** 클립보드 데이터를 직접 사용하고 기본 붙여넣기 방지 (안정적)
-        e.preventDefault(); 
-        pasteData = (e.clipboardData || window.clipboardData).getData('text');
-        
-        const trimmedText = pasteData.trim();
-        if (trimmedText) {
-            if (URL_PATTERN.test(trimmedText)) {
-                fetchAndProcessUrlContent(trimmedText);
-            } else {
-                processPastedText(trimmedText);
-            }
-        }
+    if (url && text) {
+        alert("URL 입력 창과 텍스트 입력 창 중 하나만 채워주세요.");
         return;
+    }
 
+    if (url) {
+        fetchAndProcessUrlContent(url);
+    } else if (text) {
+        handleClipboardText();
     } else {
-        // **Mobile 환경:** 기본 붙여넣기 동작을 허용 (e.preventDefault() 사용 안함)
-        
-        // DOM 업데이트를 기다린 후 텍스트를 추출합니다.
-        setTimeout(() => {
-            // DOM에서 텍스트를 추출하고, 불필요한 HTML과 공백을 정리합니다.
-            let extractedText = $textViewer.textContent.trim();
-            
-            // 공백과 줄바꿈을 정리합니다.
-            extractedText = extractedText.replace(/(\n\s*){3,}/g, '\n\n').trim();
-
-            // 추출 후 텍스트 뷰어 비우기
-            $textViewer.innerHTML = '';
-
-            if (extractedText) {
-                // 붙여넣기 된 내용이 초기 안내 문구와 같다면 무시
-                const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
-                if (extractedText.replace(/\s+/g, ' ') === initialText) {
-                     console.log("붙여넣기 내용이 안내 문구와 동일하여 무시됨.");
-                     // 추출에 실패하면 다시 안내 문구를 표시
-                     $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
-                     return;
-                }
-                
-                if (URL_PATTERN.test(extractedText)) {
-                    fetchAndProcessUrlContent(extractedText);
-                } else {
-                    processPastedText(extractedText);
-                }
-            } else {
-                console.log("모바일 붙여넣기 후 텍스트 추출 실패 또는 빈 내용");
-                // 추출에 실패하면 다시 안내 문구를 표시
-                $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
-            }
-        }, 250); // 지연 시간을 250ms로 늘려 안정성 확보
-
-        return; 
+        alert("URL 또는 텍스트를 입력/붙여넣기 후 '음성로드' 버튼을 클릭해주세요.");
     }
 }
 
+
 function handleFiles(event) {
     console.log('handleFiles triggered:', event.target.files);
-    // 파일 업로드가 시작되면 텍스트 뷰어의 안내 문구를 지웁니다.
-    clearInitialTextViewerContent(); 
-    
     const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
     if (filesData.length + newFiles.length > MAX_FILES) {
         alert(`최대 ${MAX_FILES}개 파일만 첨부할 수 있습니다.`);
@@ -510,45 +464,40 @@ function processFileChunks(fileIndex, startReading) {
     requestAnimationFrame(renderFileList);
 }
 
-// 전역 드래그 앤 드롭 설정 (텔레그램 스타일)
-function setupFullScreenDragAndDrop() {
-    let dragCounter = 0; // 드래그 진입 횟수를 카운트하여 정확한 드롭존 표시/숨김 처리
+function setupDragAndDrop() {
+    console.log('Setting up drag and drop');
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        $dropArea.addEventListener(eventName, preventDefaults, false);
+    });
 
-    document.addEventListener('dragenter', (e) => {
+    ['dragenter', 'dragover'].forEach(eventName => {
+        $dropArea.addEventListener(eventName, () => {
+            console.log('Drag event:', eventName);
+            $dropArea.classList.add('active');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        $dropArea.addEventListener(eventName, () => {
+            console.log('Drag event:', eventName);
+            $dropArea.classList.remove('active');
+        }, false);
+    });
+
+    $dropArea.addEventListener('drop', handleDrop, false);
+
+    function preventDefaults(e) {
         e.preventDefault();
-        dragCounter++;
-        if (dragCounter === 1) { // 최상위 요소에 처음 진입했을 때만 표시
-            $fullScreenDropArea.style.display = 'flex';
-        }
-    }, false);
-
-    document.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-    }, false);
-
-    document.addEventListener('dragleave', (e) => {
-        dragCounter--;
-        if (dragCounter === 0) { // 모든 요소에서 벗어났을 때 숨김
-            $fullScreenDropArea.style.display = 'none';
-        }
-    }, false);
-
-    $fullScreenDropArea.addEventListener('drop', handleDrop, false);
+        e.stopPropagation();
+    }
 
     function handleDrop(e) {
-        e.preventDefault();
-        dragCounter = 0; // 드롭하면 카운트 초기화
-        $fullScreenDropArea.style.display = 'none';
-
+        console.log('File dropped:', e.dataTransfer.files);
         const dt = e.dataTransfer;
-        if (dt.files && dt.files.length > 0) {
-             // FileList를 받아 handleFiles를 호출합니다.
-             handleFiles({ target: { files: dt.files, value: '' } });
-        }
+        $fileInput.files = dt.files;
+        handleFiles({ target: $fileInput });
     }
 }
-
 
 // --- 재생 컨트롤 기능 ---
 async function startReadingFromCurrentChunk() {
@@ -732,7 +681,7 @@ function deleteFile(index) {
     saveBookmark();
 
     if (filesData.length === 0) {
-        $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+        $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
         currentFileIndex = -1;
     }
 }
@@ -748,7 +697,7 @@ function clearAllFiles() {
     currentCharIndex = 0;
     localStorage.removeItem('autumnReaderBookmark');
     requestAnimationFrame(renderFileList);
-    $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+    $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
 }
 
 function setupFileListSortable() {
@@ -782,8 +731,7 @@ function setupFileListSortable() {
 // --- UI 및 북마크 기능 ---
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
-        // 파일이 없을 경우 초기 안내 문구 표시
-        $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+        $textViewer.innerHTML = '<p>텍스트 파일을 업로드하면 이곳에 내용이 표시됩니다.</p>';
         return;
     }
 
@@ -806,6 +754,7 @@ function renderTextViewer(fileIndex) {
     $textViewer.innerHTML = htmlContent;
 
     if (isSpeaking || isPaused) {
+        // [유지] 지연시간 100ms
         setTimeout(scrollToCurrentChunk, 100);
     }
 }
@@ -819,8 +768,6 @@ function scrollToCurrentChunk() {
 
 function setupTextViewerClickEvent() {
     $textViewer.addEventListener('click', (e) => {
-        if (filesData.length === 0) return;
-
         const chunkElement = e.target.closest('.text-chunk');
         if (!chunkElement) return;
 
