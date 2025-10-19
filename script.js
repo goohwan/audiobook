@@ -4,13 +4,7 @@ const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자
 const VISIBLE_CHUNKS = 10; // 가상화: 한 번에 렌더링할 청크 수
 const URL_PATTERN = /^(http|https):\/\/[^\s$.?#].[^\s]*$/i; // URL 인식 패턴
 
-// --- 파일 관련 상수 추가 ---
-const TEXT_EXTENSIONS = ['.txt'];
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif'];
-const ALLOWED_EXTENSIONS = [...TEXT_EXTENSIONS, ...IMAGE_EXTENSIONS];
-
-// filesData 구조: { id, name, fullText(텍스트파일 또는 OCR 결과), fileObject(이미지파일 객체), isImage, chunks, isProcessed(청크까지 완료), isOcrProcessing }
-let filesData = []; 
+let filesData = []; // 업로드된 모든 파일의 데이터 저장 ({ id, name, fullText, chunks, isProcessed })
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
 let currentCharIndex = 0; // 청크 내 현재 문자 위치
@@ -25,10 +19,20 @@ let isPaused = false;
 let isSpeaking = false;
 let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent); // 모바일 감지
 
-// DOM 요소 캐시 (let으로 선언하여 DOMContentLoaded에서 할당)
-let $fileInput, $fullScreenDropArea, $fileList, $textViewer, $voiceSelect, $rateSlider, $rateDisplay, $playPauseBtn;
-let $sequentialReadCheckbox, $clearAllFilesBtn;
-const $ = (selector) => document.querySelector(selector); // $ 함수는 유지
+// DOM 요소 캐시
+const $ = (selector) => document.querySelector(selector);
+const $fileInput = $('#file-input'); // 숨겨진 파일 인풋 (프로그래밍 방식으로 사용)
+const $fullScreenDropArea = $('#full-screen-drop-area'); // 새로 추가된 전역 드롭존
+const $fileList = $('#file-list');
+const $textViewer = $('#text-viewer');
+const $voiceSelect = $('#voice-select');
+const $rateSlider = $('#rate-slider');
+const $rateDisplay = $('#rate-display');
+const $playPauseBtn = $('#play-pause-btn');
+
+// 추가된 DOM 요소
+const $sequentialReadCheckbox = $('#sequential-read-checkbox');
+const $clearAllFilesBtn = $('#clear-all-files-btn');
 
 // 텍스트 뷰어 초기 안내문
 const INITIAL_TEXT_VIEWER_TEXT = '텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command+V) 파일을 화면에 드래그하여 업로드하세요.';
@@ -36,20 +40,6 @@ const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
 
 // --- 초기화 및 이벤트 리스너 ---
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. DOM 요소 할당 (DOM이 로드된 후에 수행하여 에러 방지)
-    $fileInput = $('#file-input'); 
-    $fullScreenDropArea = $('#full-screen-drop-area'); 
-    $fileList = $('#file-list');
-    $textViewer = $('#text-viewer');
-    $voiceSelect = $('#voice-select');
-    $rateSlider = $('#rate-slider');
-    $rateDisplay = $('#rate-display');
-    $playPauseBtn = $('#play-pause-btn');
-    $sequentialReadCheckbox = $('#sequential-read-checkbox');
-    $clearAllFilesBtn = $('#clear-all-files-btn');
-    
-    // 2. 초기 로직 및 이벤트 리스너 등록
-    
     if (!('speechSynthesis' in window)) {
         alert('죄송합니다. 이 브라우저는 Web Speech API를 지원하지 않아 서비스를 이용할 수 없습니다.');
         return;
@@ -101,222 +91,20 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
-// --- 목소리 목록 로드 (수정: 한국어 목소리가 없으면 모든 목소리 표시) ---
-function populateVoiceList() {
-    const voices = synth.getVoices();
-    $voiceSelect.innerHTML = '';
-
-    let koreanVoices = [];
-    let googleKoreanVoiceName = null;
-    let preferredVoiceName = null;
-    let selectedVoice = null;
-
-    voices.forEach((voice) => {
-        const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
-        if (voice.lang.includes('ko')) {
-            koreanVoices.push(option);
-            if (voice.name.includes('Google') || voice.name.includes('Standard') || voice.name.includes('Wavenet')) {
-                googleKoreanVoiceName = voice.name;
-            }
-        }
-    });
-
-    if (koreanVoices.length === 0) {
-        // 한국어 목소리가 없으면 모든 목소리 추가 (폴백)
-        voices.forEach((voice) => {
-            const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
-            $voiceSelect.appendChild(option);
-        });
-    } else {
-        koreanVoices.forEach(option => $voiceSelect.appendChild(option));
-    }
-
-    if (googleKoreanVoiceName) {
-        preferredVoiceName = googleKoreanVoiceName;
-    } else if (koreanVoices.length > 0) {
-        preferredVoiceName = koreanVoices[0].value;
-    }
-
-    const savedBookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
-    if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
-        selectedVoice = savedBookmark.settings.voice;
-    } else if (preferredVoiceName) {
-        selectedVoice = preferredVoiceName;
-    } else if ($voiceSelect.options.length > 0) {
-        selectedVoice = $voiceSelect.options[0].value; // 기본값 설정
-    }
-
-    if (selectedVoice) {
-        $voiceSelect.value = selectedVoice;
-    }
-
-    if (savedBookmark && savedBookmark.settings) {
-        $rateSlider.value = savedBookmark.settings.rate;
-    }
-
-    updateRateDisplay();
-}
-
-// --- 파일 처리 함수 추가 (누락된 부분 재구성) ---
-function chunkText(text) {
-    const chunks = [];
-    let currentChunk = '';
-    const sentences = text.split(/([.!?])\s*/); // 문장 단위 분할
-    for (let sentence of sentences) {
-        if (currentChunk.length + sentence.length > CHUNK_SIZE_LIMIT) {
-            chunks.push(currentChunk.trim());
-            currentChunk = sentence;
-        } else {
-            currentChunk += sentence;
-        }
-    }
-    if (currentChunk) chunks.push(currentChunk.trim());
-    return chunks;
-}
-
-async function handleFiles(e) {
-    const files = e.target.files;
-    if (files.length + filesData.length > MAX_FILES) {
-        alert(`파일은 최대 ${MAX_FILES}개까지 첨부 가능합니다.`);
-        return;
-    }
-
-    for (let file of files) {
-        const ext = file.name.toLowerCase().match(/\.( [^.]+$)/)?.[0] || '';
-        if (!ALLOWED_EXTENSIONS.includes(ext)) continue;
-
-        const fileId = Date.now() + Math.floor(Math.random() * 1000000);
-        const isImage = IMAGE_EXTENSIONS.includes(ext);
-        filesData.push({
-            id: fileId,
-            name: file.name,
-            fullText: '',
-            fileObject: isImage ? file : null,
-            isImage,
-            chunks: [],
-            isProcessed: false,
-            isOcrProcessing: false
-        });
-    }
-
-    requestAnimationFrame(renderFileList);
-    if (filesData.length > 0 && currentFileIndex === -1) {
-        currentFileIndex = 0;
-    }
-    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
-    saveBookmark();
-}
-
-function setupFullScreenDragAndDrop() {
-    document.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        $fullScreenDropArea.style.display = 'flex';
-    });
-
-    document.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        if (e.relatedTarget === null) {
-            $fullScreenDropArea.style.display = 'none';
-        }
-    });
-
-    document.addEventListener('drop', (e) => {
-        e.preventDefault();
-        $fullScreenDropArea.style.display = 'none';
-        const files = e.dataTransfer.files;
-        handleFiles({ target: { files } });
-    });
-}
-
-async function processFile(fileIndex, autoPlay = false) {
-    const file = filesData[fileIndex];
-    if (file.isProcessed) return;
-
-    if (file.isImage) {
-        await processOcrForImage(fileIndex, autoPlay);
-    } else {
-        // 텍스트 파일 처리
-        let text = '';
-        const encodings = ['utf-8', 'euc-kr', 'iso-8859-1'];
-        for (let encoding of encodings) {
-            try {
-                text = await readTextFile(file.fileObject, encoding);
-                if (text.includes('?') || text.length === 0) continue;
-                break;
-            } catch (e) {
-                console.warn(`인코딩 ${encoding} 실패: ${e}`);
-            }
-        }
-        file.fullText = text.trim();
-        file.chunks = chunkText(file.fullText);
-        file.isProcessed = true;
-        requestAnimationFrame(() => renderTextViewer(fileIndex));
-        requestAnimationFrame(renderFileList);
-        if (autoPlay) {
-            startReadingFromCurrentChunk();
-        }
-    }
-}
-
-// --- OCR 처리 함수 (수정: DataCloneError 해결을 위해 HTMLImageElement 사용) ---
-async function processOcrForImage(fileIndex, autoPlay = false) {
-    const file = filesData[fileIndex];
-    file.isOcrProcessing = true;
-    requestAnimationFrame(() => renderTextViewer(fileIndex));
-    requestAnimationFrame(renderFileList);
-
-    const imageUrl = URL.createObjectURL(file.fileObject);
-    try {
-        // HTMLImageElement 생성 및 로드
-        const image = new Image();
-        image.src = imageUrl;
-        await new Promise((resolve, reject) => {
-            image.onload = resolve;
-            image.onerror = reject;
-        });
-
-        const worker = await Tesseract.createWorker('kor', 1, {
-            logger: m => {
-                console.log(m);
-                if (m.status === 'recognizing text') {
-                    const progress = m.progress || 0;
-                    $textViewer.innerHTML = `<p style="color:#FFD700;">OCR 진행 중: ${(progress * 100).toFixed(2)}%</p>`;
-                }
-            },
-        });
-
-        const { data: { text } } = await worker.recognize(image);
-        await worker.terminate();
-
-        file.fullText = text.trim();
-        file.chunks = chunkText(file.fullText);
-        file.isProcessed = true;
-        file.isOcrProcessing = false;
-
-        requestAnimationFrame(() => renderTextViewer(fileIndex));
-        requestAnimationFrame(renderFileList);
-
-        if (autoPlay) {
-            startReadingFromCurrentChunk();
-        }
-    } catch (e) {
-        console.error('OCR 오류:', e);
-        file.isOcrProcessing = false;
-        $textViewer.innerHTML = `<p style="color:red;">OCR 처리 중 오류가 발생했습니다: ${e.message}</p>`;
-    } finally {
-        URL.revokeObjectURL(imageUrl);
-    }
-}
-
-// 나머지 코드 (기존과 동일, 위에서 수정된 부분 적용)
+/**
+ * 텍스트 뷰어에 포커스가 갔을 때, 초기 안내 문구라면 내용을 비웁니다.
+ */
 function clearInitialTextViewerContent() {
+    // 텍스트 내용만을 비교
     const currentText = $textViewer.textContent.trim().replace(/\s+/g, ' ');
     const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
 
+    // 현재 내용이 초기 안내문과 같거나 비어있다면 내용을 비웁니다.
     if (currentText === initialText || currentText === '') {
         $textViewer.innerHTML = '';
     }
 }
+
 
 async function handleVisibilityChange() {
     if (document.visibilityState === 'hidden') {
@@ -393,10 +181,57 @@ function releaseWakeLock() {
     }
 }
 
+// --- 목소리 및 설정 기능 ---
+function populateVoiceList() {
+    const voices = synth.getVoices();
+    $voiceSelect.innerHTML = '';
+
+    let koreanVoices = [];
+    let googleKoreanVoiceName = null;
+    let preferredVoiceName = null;
+    let selectedVoice = null;
+
+    voices.forEach((voice) => {
+        const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
+        if (voice.lang.includes('ko')) {
+            koreanVoices.push(option);
+            if (voice.name.includes('Google') || voice.name.includes('Standard') || voice.name.includes('Wavenet')) {
+                googleKoreanVoiceName = voice.name;
+            }
+        }
+    });
+
+    koreanVoices.forEach(option => $voiceSelect.appendChild(option));
+
+    if (googleKoreanVoiceName) {
+        preferredVoiceName = googleKoreanVoiceName;
+    } else if (koreanVoices.length > 0) {
+        preferredVoiceName = koreanVoices[0].value;
+    }
+
+    const savedBookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
+    if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
+        selectedVoice = savedBookmark.settings.voice;
+    } else if (preferredVoiceName) {
+        selectedVoice = preferredVoiceName;
+    }
+
+    if (selectedVoice) {
+        $voiceSelect.value = selectedVoice;
+    }
+
+    if (savedBookmark && savedBookmark.settings) {
+        $rateSlider.value = savedBookmark.settings.rate;
+    }
+
+    updateRateDisplay();
+}
+
 function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
 
+// --- 파일 처리 및 분할 기능 ---
 function readTextFile(file, encoding) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -410,6 +245,10 @@ function readTextFile(file, encoding) {
     });
 }
 
+/**
+ * URL에서 웹페이지 콘텐츠를 추출하고 처리합니다.
+ * Readability와 유사한 Heuristic을 사용하여 본문 텍스트를 찾습니다.
+ */
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     // URL 처리를 위해 프록시 사용 (CORS 회피)
@@ -474,64 +313,323 @@ async function fetchAndProcessUrlContent(url) {
             }
         }
         
+        // --- 🔍 추출 로직 최종 수정 완료 ---
+
         if (text.length < 50) {
              throw new Error("URL에서 추출된 텍스트 내용이 너무 짧거나 콘텐츠를 찾을 수 없습니다. (추출된 문자열 길이: " + text.length + ")");
         }
 
         const fileId = Date.now() + Math.floor(Math.random() * 1000000);
-        const fileName = `[URL] ${url.substring(0, 50).replace(/[\\/?:<>\\*\\"] /g, '')}...`;
-        filesData.push({
+        const fileName = `[URL] ${url.substring(0, 50).replace(/(\/|\?)/g, ' ')}...`;
+        const newFileData = {
             id: fileId,
             name: fileName,
             fullText: text,
-            isImage: false,
-            chunks: chunkText(text),
-            isProcessed: true,
-            isOcrProcessing: false
-        });
-        currentFileIndex = filesData.length - 1;
-        requestAnimationFrame(renderFileList);
-        requestAnimationFrame(() => renderTextViewer(currentFileIndex));
-    } catch (e) {
-        console.error(e);
-        $textViewer.innerHTML = '<p style="color:red;">URL 콘텐츠 추출 실패: ' + e.message + '</p>';
+            chunks: [],
+            isProcessed: false
+        };
+        filesData.unshift(newFileData);
+        if (filesData.length > MAX_FILES) filesData.pop();
+
+        renderFileList();
+        currentFileIndex = 0;
+        processFileChunks(0, true);
+
+        $textViewer.innerHTML = '';
+    } catch (error) {
+        alert(`URL 로드 실패: ${error.message}.`);
+        $textViewer.innerHTML = `<p style="color:red;">오류 발생: ${error.message}</p>`;
+        renderFileList();
     }
 }
 
-function handlePasteInTextViewer(e) {
-    e.preventDefault();
-    const files = e.clipboardData.files;
-    const validFiles = Array.from(files).filter(f => {
-        const ext = f.name.toLowerCase().match(/\.( [^.]+$)/)?.[0] || '';
-        return ALLOWED_EXTENSIONS.includes(ext);
-    });
-
-    if (validFiles.length > 0) {
-        handleFiles({ target: { files: validFiles, value: '' } });
+function processPastedText(text) {
+    if (!text) {
         return;
     }
 
-    // 텍스트나 파일이 없으면 안내 문구 다시 표시
-    if (filesData.length === 0) {
-        $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+    const fileId = Date.now() + Math.floor(Math.random() * 1000000);
+    const fileName = `[클립보드] ${new Date().toLocaleTimeString()} - ${text.substring(0, 20)}...`;
+
+    const newFileData = {
+        id: fileId,
+        name: fileName,
+        fullText: text,
+        chunks: [],
+        isProcessed: false
+    };
+
+    filesData.unshift(newFileData);
+    if (filesData.length > MAX_FILES) filesData.pop();
+
+    renderFileList();
+    currentFileIndex = 0;
+    processFileChunks(0, true);
+    
+    $textViewer.innerHTML = '';
+}
+
+/**
+ * 텍스트 뷰어 붙여넣기 이벤트 핸들러
+ * PC와 모바일 로직을 명확히 분리하여 오류를 방지하고, 모바일 추출 시 타이밍을 확보합니다.
+ */
+function handlePasteInTextViewer(e) {
+    // 1. 초기 안내 문구 제거를 시도합니다.
+    clearInitialTextViewerContent();
+    
+    let pasteData = '';
+
+    if (!isMobile) {
+        // **PC/Web 환경:** 클립보드 데이터를 직접 사용하고 기본 붙여넣기 방지 (안정적)
+        e.preventDefault(); 
+        pasteData = (e.clipboardData || window.clipboardData).getData('text');
+        
+        const trimmedText = pasteData.trim();
+        if (trimmedText) {
+            if (URL_PATTERN.test(trimmedText)) {
+                fetchAndProcessUrlContent(trimmedText);
+            } else {
+                processPastedText(trimmedText);
+            }
+        }
+        return;
+
+    } else {
+        // **Mobile 환경:** 기본 붙여넣기 동작을 허용 (e.preventDefault() 사용 안함)
+        
+        // DOM 업데이트를 기다린 후 텍스트를 추출합니다.
+        setTimeout(() => {
+            // DOM에서 텍스트를 추출하고, 불필요한 HTML과 공백을 정리합니다.
+            let extractedText = $textViewer.textContent.trim();
+            
+            // 공백과 줄바꿈을 정리합니다.
+            extractedText = extractedText.replace(/(\n\s*){3,}/g, '\n\n').trim();
+
+            // 추출 후 텍스트 뷰어 비우기
+            $textViewer.innerHTML = '';
+
+            if (extractedText) {
+                // 붙여넣기 된 내용이 초기 안내 문구와 같다면 무시
+                const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
+                if (extractedText.replace(/\s+/g, ' ') === initialText) {
+                     console.log("붙여넣기 내용이 안내 문구와 동일하여 무시됨.");
+                     // 추출에 실패하면 다시 안내 문구를 표시
+                     $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+                     return;
+                }
+                
+                if (URL_PATTERN.test(extractedText)) {
+                    fetchAndProcessUrlContent(extractedText);
+                } else {
+                    processPastedText(extractedText);
+                }
+            } else {
+                console.log("모바일 붙여넣기 후 텍스트 추출 실패 또는 빈 내용");
+                // 추출에 실패하면 다시 안내 문구를 표시
+                $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+            }
+        }, 250); // 지연 시간을 250ms로 늘려 안정성 확보
+
+        return; 
     }
 }
 
+function handleFiles(event) {
+    console.log('handleFiles triggered:', event.target.files);
+    // 파일 업로드가 시작되면 텍스트 뷰어의 안내 문구를 지웁니다.
+    clearInitialTextViewerContent(); 
+    
+    const newFiles = Array.from(event.target.files).filter(file => file.name.toLowerCase().endsWith('.txt'));
+    if (filesData.length + newFiles.length > MAX_FILES) {
+        alert(`최대 ${MAX_FILES}개 파일만 첨부할 수 있습니다.`);
+        newFiles.splice(MAX_FILES - filesData.length);
+    }
+    if (newFiles.length === 0) {
+        console.log('No valid .txt files selected');
+        event.target.value = '';
+        return;
+    }
+
+    const bookmarkData = localStorage.getItem('autumnReaderBookmark');
+    let resumeTargetFileName = JSON.parse(bookmarkData)?.fileName;
+    let chunkIndexForResume = JSON.parse(bookmarkData)?.chunkIndex || 0;
+    let newFileIndexForResume = -1;
+
+    const filePromises = newFiles.map(file => {
+        return (async () => {
+            console.log(`Reading file: ${file.name}`);
+            let content = '';
+            try {
+                content = await readTextFile(file, 'UTF-8');
+            } catch (error) {
+                console.warn(`UTF-8 읽기 중 오류 발생: ${error.message}`);
+            }
+            if (content.includes('\ufffd') || !content) {
+                try {
+                    content = await readTextFile(file, 'windows-949');
+                    if (!content) throw new Error("인코딩 재시도 후에도 내용이 비어있습니다.");
+                    console.log(`파일 "${file.name}"을(를) ANSI/windows-949 인코딩으로 읽었습니다.`);
+                } catch (error) {
+                    alert(`파일 "${file.name}"을(를) 읽는 데 실패했습니다. 파일 인코딩을 확인해 주세요.`);
+                    return null;
+                }
+            }
+
+            const fileId = Date.now() + Math.floor(Math.random() * 1000000);
+            return {
+                id: fileId,
+                name: file.name,
+                fullText: content,
+                chunks: [],
+                isProcessed: false
+            };
+        })();
+    });
+
+    Promise.all(filePromises).then(results => {
+        const newlyReadFiles = results.filter(file => file !== null);
+        if (newlyReadFiles.length === 0) {
+            event.target.value = '';
+            return;
+        }
+
+        newlyReadFiles.sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
+        const startIndex = filesData.length;
+        filesData.push(...newlyReadFiles);
+
+        let shouldResume = false;
+        if (resumeTargetFileName) {
+            const resumeFileIndexInNewList = newlyReadFiles.findIndex(f => f.name === resumeTargetFileName);
+            if (resumeFileIndexInNewList !== -1) {
+                newFileIndexForResume = startIndex + resumeFileIndexInNewList;
+                shouldResume = true;
+            }
+        }
+
+        if (shouldResume) {
+            const resume = confirm(`[북마크 복원] "${filesData[newFileIndexForResume].name}"의 저장된 위치(${chunkIndexForResume + 1}번째 청크)부터 이어서 읽으시겠습니까?`);
+            if (resume) {
+                currentFileIndex = newFileIndexForResume;
+                currentChunkIndex = chunkIndexForResume;
+                processFileChunks(currentFileIndex, true);
+            }
+        } else if (currentFileIndex === -1) {
+            currentFileIndex = startIndex;
+            processFileChunks(currentFileIndex, false);
+        }
+
+        requestAnimationFrame(renderFileList);
+    });
+
+    event.target.value = '';
+}
+
+function processFileChunks(fileIndex, startReading) {
+    const file = filesData[fileIndex];
+    if (!file || file.isProcessed) return;
+
+    const text = file.fullText;
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
+    let currentChunk = '';
+
+    sentences.forEach(sentence => {
+        if ((currentChunk + sentence).length > CHUNK_SIZE_LIMIT) {
+            file.chunks.push(currentChunk.trim());
+            currentChunk = sentence;
+        } else {
+            currentChunk += sentence;
+        }
+    });
+
+    if (currentChunk.trim()) {
+        file.chunks.push(currentChunk.trim());
+    }
+
+    if (file.chunks.length > 0) {
+        file.isProcessed = true;
+        console.log(`[처리 완료] 파일 "${file.name}" 청크 처리 완료. 총 ${file.chunks.length}개 청크.`);
+    }
+
+    if (startReading && currentFileIndex === fileIndex) {
+        requestAnimationFrame(() => renderTextViewer(fileIndex));
+        startReadingFromCurrentChunk();
+    }
+
+    requestAnimationFrame(renderFileList);
+}
+
+// 전역 드래그 앤 드롭 설정 (텔레그램 스타일)
+function setupFullScreenDragAndDrop() {
+    let dragCounter = 0; // 드래그 진입 횟수를 카운트하여 정확한 드롭존 표시/숨김 처리
+
+    document.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) { // 최상위 요소에 처음 진입했을 때만 표시
+            $fullScreenDropArea.style.display = 'flex';
+        }
+    }, false);
+
+    document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    }, false);
+
+    document.addEventListener('dragleave', (e) => {
+        dragCounter--;
+        if (dragCounter === 0) { // 모든 요소에서 벗어났을 때 숨김
+            $fullScreenDropArea.style.display = 'none';
+        }
+    }, false);
+
+    $fullScreenDropArea.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+        e.preventDefault();
+        dragCounter = 0; // 드롭하면 카운트 초기화
+        $fullScreenDropArea.style.display = 'none';
+
+        const dt = e.dataTransfer;
+        // DataTransfer 객체에서 'text/plain' 형식의 텍스트를 추출
+        const droppedText = dt.getData('text/plain').trim();
+        const files = dt.files;
+
+        // 1. 텍스트 데이터 확인 및 처리 (새로 추가된 기능)
+        if (droppedText) {
+            // URL 패턴 확인 (기존 handlePasteInTextViewer 로직 재사용)
+            if (URL_PATTERN.test(droppedText)) {
+                fetchAndProcessUrlContent(droppedText);
+            } else {
+                processPastedText(droppedText);
+            }
+            // 텍스트를 처리했으면 파일은 무시하고 종료
+            return; 
+        }
+
+        // 2. 파일 데이터 확인 및 처리 (기존 로직)
+        if (files && files.length > 0) {
+             // FileList를 받아 handleFiles를 호출합니다.
+             handleFiles({ target: { files: files, value: '' } });
+             return;
+        }
+        
+        // 텍스트나 파일이 없으면 안내 문구 다시 표시
+        if (filesData.length === 0) {
+            $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+        }
+    }
+}
+
+
+// --- 재생 컨트롤 기능 ---
 async function startReadingFromCurrentChunk() {
     if (currentFileIndex === -1) return;
 
     const file = filesData[currentFileIndex];
-    
-    // 처리되지 않은 파일이면 OCR 또는 청크 처리를 시작합니다.
-    if (!file.isProcessed) {
-        // 이미 OCR 작업 중이면 대기
-        if (file.isImage && file.isOcrProcessing) {
-             console.log("OCR 작업 중이므로 대기합니다.");
-             return;
-        }
-        
-        await processFile(currentFileIndex, true);
-        return; // processFile이 성공하면 재귀적으로 startReadingFromCurrentChunk를 호출합니다.
+    if (!file || !file.isProcessed) {
+        alert(`파일 "${file.name}"을(를) 먼저 청크 처리해야 합니다. 처리를 시작합니다.`);
+        processFileChunks(currentFileIndex, true);
+        return;
     }
 
     currentChunkIndex = Math.min(currentChunkIndex, file.chunks.length - 1);
@@ -584,21 +682,13 @@ function speakNextChunk() {
 
 function togglePlayPause() {
     if (currentFileIndex === -1) {
-        alert("재생할 파일 또는 텍스트를 먼저 준비해주세요.");
+        alert("재생할 파일을 먼저 선택해주세요.");
         return;
     }
-    
-    // 파일이 이미지이고 OCR이 완료되지 않은 경우 OCR 시작
-    const file = filesData[currentFileIndex];
-    if (file.isImage && !file.isProcessed) {
-        processFile(currentFileIndex, true);
-        return;
-    }
-
 
     if (isSpeaking && !isPaused) {
         if (isMobile) {
-            synth.cancel(); 
+            synth.cancel(); // 모바일에서 pause 대신 cancel
         } else {
             synth.pause();
         }
@@ -607,7 +697,7 @@ function togglePlayPause() {
         releaseWakeLock();
     } else if (isSpeaking && isPaused) {
         if (isMobile) {
-            speakNextChunk(); 
+            speakNextChunk(); // 모바일에서 resume 대신 재시작 (위치 유지)
         } else {
             synth.resume();
         }
@@ -615,7 +705,6 @@ function togglePlayPause() {
         $playPauseBtn.textContent = '⏸️';
         requestWakeLock();
     } else {
-        // 최초 재생 시작 또는 파일 처리 시작
         startReadingFromCurrentChunk();
     }
 }
@@ -648,7 +737,7 @@ function changeFile(newIndex) {
     currentCharIndex = 0;
 
     if (!filesData[newIndex].isProcessed) {
-        processFile(newIndex, isSpeaking); // 현재 재생 상태를 유지하며 다음 파일 처리
+        processFileChunks(newIndex, true);
     } else {
         requestAnimationFrame(() => renderTextViewer(newIndex));
         if (isSpeaking) {
@@ -684,10 +773,14 @@ function handleFileListItemClick(e) {
     currentChunkIndex = 0;
     currentCharIndex = 0;
 
-    // 파일을 클릭하면 바로 처리 및 재생 시작 (OCR 필요 시 OCR 시작)
-    processFile(currentFileIndex, true); 
+    if (!filesData[currentFileIndex].isProcessed) {
+        processFileChunks(currentFileIndex, true);
+    } else {
+        startReadingFromCurrentChunk();
+    }
 
     requestAnimationFrame(renderFileList);
+    requestAnimationFrame(() => renderTextViewer(currentFileIndex));
 }
 
 function deleteFile(index) {
@@ -760,21 +853,14 @@ function setupFileListSortable() {
 // --- UI 및 북마크 기능 ---
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
+        // 파일이 없을 경우 초기 안내 문구 표시
         $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
         return;
     }
 
     const file = filesData[fileIndex];
     if (!file.isProcessed) {
-        let statusMessage = `[파일 로딩 중/청크 처리 중] : ${file.name}`;
-        if (file.isImage) {
-            if (file.isOcrProcessing) {
-                statusMessage = `[이미지 OCR 처리 중] : ${file.name} - 잠시만 기다려주세요... (Tesseract.js)`;
-            } else {
-                statusMessage = `[이미지 파일] : ${file.name} - 재생 버튼(▶️) 또는 파일 클릭 시 텍스트 인식(OCR)을 시작합니다.`;
-            }
-        }
-        $textViewer.innerHTML = `<p style="color:#FFD700;">${statusMessage}</p>`;
+        $textViewer.innerHTML = `<p style="color:#FFD700;">[파일 로딩 중/청크 처리 중] : ${file.name}</p>`;
         return;
     }
 
@@ -858,18 +944,9 @@ function renderFileList() {
         deleteBtn.classList.add('delete-file-btn');
         deleteBtn.title = '파일 삭제';
 
-        // OCR/처리 상태 표시
         if (!file.isProcessed) {
-            let statusText = ' (⏳ 대기)';
-            if (file.isImage) {
-                if (file.isOcrProcessing) {
-                    statusText = ' (⚙️ OCR 중...)';
-                } else {
-                    statusText = ' (🖼️ 이미지 대기)';
-                }
-            }
             const statusSpan = document.createElement('span');
-            statusSpan.textContent = statusText;
+            statusSpan.textContent = ' (⏳ 대기)';
             statusSpan.style.color = '#FFD700';
             fileNameSpan.appendChild(statusSpan);
         }
