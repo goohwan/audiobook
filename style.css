@@ -167,6 +167,10 @@ h1 {
     color: #2c2c2c;
 }
 
+.mobile-only {
+    display: none;
+}
+
 @media (max-width: 450px) {
     .container {
         max-width: 100%;
@@ -175,5 +179,28 @@ h1 {
 
     #left_pannel {
         padding: 0;
+    }
+
+    .mobile-only {
+        display: block;
+    }
+
+    .mobile-buttons {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .mobile-buttons button {
+        background-color: #FFD700;
+        border: none;
+        padding: 10px;
+        cursor: pointer;
+        border-radius: 5px;
+        flex: 1;
+    }
+
+    .mobile-buttons button:hover {
+        background-color: #FFC107;
     }
 }
