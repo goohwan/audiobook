@@ -361,7 +361,7 @@ async function fetchAndProcessUrlContent(url) {
     }
 }
 
-// --- 붙여넣기 처리 (기존 유지) ---
+// --- 붙여넣기 처리 (모바일 자동 처리 제거) ---
 function processPastedText(text) {
     if (!text) return;
 
@@ -405,20 +405,8 @@ function handlePasteInTextViewer(e) {
         return;
     } 
     
-    setTimeout(() => {
-        let extractedText = $textViewer.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
-        $textViewer.innerHTML = '';
-
-        if (extractedText && extractedText.replace(/\s+/g, ' ') !== INITIAL_TEXT_VIEWER_TEXT.replace(/\s+/g, ' ')) {
-            if (URL_PATTERN.test(extractedText)) {
-                fetchAndProcessUrlContent(extractedText);
-            } else {
-                processPastedText(extractedText);
-            }
-        } else {
-            $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
-        }
-    }, 250);
+    // 모바일 paste 시 자동 처리 제거: 버튼 클릭으로 대체
+    // setTimeout 제거
 }
 
 // --- 파일 업로드 처리 (수정 및 복원) ---
