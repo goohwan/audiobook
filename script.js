@@ -28,7 +28,7 @@ let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent); // 모바일 �
 // NOTE: DOMContentLoaded 시점에서 할당되므로, 임시로 전역 스코프에서 null/undefined 방지 처리
 const $ = (selector) => document.querySelector(selector); 
 let $fileInput, $fullScreenDropArea, $fileList, $textViewer, $voiceSelect, $rateSlider, $rateDisplay, $playPauseBtn;
-let $sequentialReadCheckbox, $clearAllFilesBtn, $mobileLoadBtn; // <-- $mobileLoadBtn 추가
+let $sequentialReadCheckbox, $clearAllFilesBtn;
 
 const INITIAL_TEXT_VIEWER_TEXT = '텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command-V) 파일을 화면에 드래그하여 업로드하세요.';
 const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
@@ -46,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $playPauseBtn = $('#play-pause-btn');
     $sequentialReadCheckbox = $('#sequential-read-checkbox');
     $clearAllFilesBtn = $('#clear-all-files-btn');
-    $mobileLoadBtn = $('#mobile-load-btn'); // <-- 버튼 할당
     
     if (!('speechSynthesis' in window)) {
         alert('Web Speech API를 지원하지 않는 브라우저입니다.');
@@ -91,11 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $clearAllFilesBtn.addEventListener('click', clearAllFiles);
     $fileList.addEventListener('click', handleFileListItemClick);
-    
-    // 모바일 로드 버튼 이벤트 리스너 추가
-    if ($mobileLoadBtn) {
-        $mobileLoadBtn.addEventListener('click', handleMobileLoadClick);
-    }
 
     setupFileListSortable();
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -398,25 +392,6 @@ function handlePasteInTextViewer(e) {
         }
     }, 250);
 }
-
-// --- 모바일 음성 로드 버튼 처리 (복원된 기능) ---
-function handleMobileLoadClick() {
-    clearInitialTextViewerContent();
-    const text = prompt("읽을 텍스트나 URL을 입력하세요:");
-    
-    if (text === null || text.trim() === '') {
-        return;
-    }
-    
-    const trimmedText = text.trim();
-
-    if (URL_PATTERN.test(trimmedText)) {
-        fetchAndProcessUrlContent(trimmedText);
-    } else {
-        processPastedText(trimmedText);
-    }
-}
-
 
 // --- 파일 업로드 처리 (수정 및 복원) ---
 async function handleFiles(event) {
