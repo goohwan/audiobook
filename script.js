@@ -4,12 +4,12 @@ const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자
 const VISIBLE_CHUNKS = 10; // 가상화: 한 번에 렌더링할 청크 수
 const URL_PATTERN = /^(http|https):\/\/[^\s$.?#].[^\s]*$/i; // URL 인식 패턴
 
-// --- 파일 관련 상수 추가 ---
+// --- 파일 관련 상수 추가 (복원) ---
 const TEXT_EXTENSIONS = ['.txt'];
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
 const ALLOWED_EXTENSIONS = [...TEXT_EXTENSIONS, ...IMAGE_EXTENSIONS];
 
-// filesData 구조: { id, name, fullText(텍스트파일 또는 OCR 결과), fileObject(이미지파일 객체), isImage, chunks, isProcessed(청크까지 완료), isOcrProcessing }
+// filesData 구조: { id, name, fullText(텍스트파일 또는 OCR 결과), fileObject(이미지파일 객체), isImage, chunks, isProcessed(청크까지 완료), isOcrProcessing } (복원)
 let filesData = []; 
 let currentFileIndex = -1;
 let currentChunkIndex = 0;
@@ -25,7 +25,7 @@ let isPaused = false;
 let isSpeaking = false;
 let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent); // 모바일 감지
 
-// DOM 요소 선택 헬퍼
+// NOTE: DOMContentLoaded 시점에서 할당되므로, 임시로 전역 스코프에서 null/undefined 방지 처리
 const $ = (selector) => document.querySelector(selector); 
 let $fileInput, $fullScreenDropArea, $fileList, $textViewer, $voiceSelect, $rateSlider, $rateDisplay, $playPauseBtn;
 let $sequentialReadCheckbox, $clearAllFilesBtn;
@@ -35,7 +35,7 @@ const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
 
 // --- 초기화 ---
 document.addEventListener('DOMContentLoaded', () => {
-    // DOM 요소 할당
+    // DOM 요소 재할당 (안전한 사용을 위해)
     $fileInput = $('#file-input');
     $fullScreenDropArea = $('#full-screen-drop-area');
     $fileList = $('#file-list');
@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $rateSlider.addEventListener('input', updateRateDisplay);
     $rateSlider.addEventListener('change', () => saveBookmark());
 
+    // 목소리 변경 시 재생 중인 경우 재시작 로직 추가
     $voiceSelect.addEventListener('change', () => {
         saveBookmark();
         if (isSpeaking) {
@@ -81,13 +82,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setupTextViewerClickEvent();
     $textViewer.addEventListener('paste', handlePasteInTextViewer);
     $textViewer.addEventListener('focus', clearInitialTextViewerContent);
-    // 포커스 아웃 시 안내글 복원
-    $textViewer.addEventListener('focusout', () => {
-        const currentText = $textViewer.textContent.trim().replace(/\s+/g, ' ');
-        if (!currentText || currentText === INITIAL_TEXT_VIEWER_TEXT.replace(/\s+/g, ' ')) {
-            $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
-        }
-    });
 
     $sequentialReadCheckbox.addEventListener('change', (e) => {
         isSequential = e.target.checked;
@@ -107,18 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if ($mobileFileUploadBtn) {
             $mobileFileUploadBtn.addEventListener('click', () => {
-                console.log('모바일 파일첨부 버튼 클릭'); // 디버깅용
                 $fileInput.click();
             });
         }
 
         if ($mobileLoadVoiceBtn) {
             $mobileLoadVoiceBtn.addEventListener('click', () => {
-                console.log('모바일 음성로드 버튼 클릭'); // 디버깅용
                 const extractedText = $textViewer.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
                 $textViewer.innerHTML = '';
                 if (extractedText && extractedText.replace(/\s+/g, ' ') !== INITIAL_TEXT_VIEWER_TEXT.replace(/\s+/g, ' ')) {
-                    console.log('처리된 텍스트:', extractedText); // 디버깅용
                     if (URL_PATTERN.test(extractedText)) {
                         fetchAndProcessUrlContent(extractedText);
                     } else {
@@ -132,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// --- 유틸리티 함수 ---
+// --- 유틸리티 함수 (기존 유지) ---
 function clearInitialTextViewerContent() {
     const currentText = $textViewer.textContent.trim().replace(/\s+/g, ' ');
     const initialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
@@ -172,7 +163,7 @@ window.addEventListener('beforeunload', () => {
     releaseWakeLock();
 });
 
-// --- Wake Lock ---
+// --- Wake Lock (기존 유지) ---
 async function requestWakeLock() {
     if ('wakeLock' in navigator) {
         try {
@@ -200,7 +191,7 @@ function releaseWakeLock() {
     }
 }
 
-// --- 목소리 설정 ---
+// --- 목소리 설정 (기존 유지) ---
 function populateVoiceList() {
     const voices = synth.getVoices();
     $voiceSelect.innerHTML = '';
@@ -212,6 +203,7 @@ function populateVoiceList() {
         const option = new Option(`${voice.name} (${voice.lang})`, voice.name);
         if (voice.lang.includes('ko')) {
             koreanVoices.push(option);
+            // Google/Standard/Wavenet 음성을 우선 선택
             if (voice.name.includes('Google') || voice.name.includes('Standard') || voice.name.includes('Wavenet')) {
                 preferredVoiceName = voice.name;
             }
@@ -245,26 +237,32 @@ function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
 
-// --- 파일 처리 및 인코딩 변환 ---
+// --- 파일 처리 및 인코딩 변환 (수정된 로직 유지) ---
+/**
+ * ArrayBuffer를 TextDecoder를 사용하여 지정된 인코딩으로 디코딩합니다.
+ */
 function readTextFile(file, encoding) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
+                // ArrayBuffer를 TextDecoder를 사용해 지정된 인코딩으로 변환
                 const decoder = new TextDecoder(encoding);
                 const content = decoder.decode(e.target.result);
                 resolve(content);
             } catch (error) {
+                // 디코딩 실패 시 오류 반환
                 reject(new Error(`디코딩 오류 (${encoding}): ${error.message}`));
             }
         };
         reader.onerror = (e) => reject(new Error(`파일 읽기 오류: ${e.target.error.name}`));
-        reader.readAsArrayBuffer(file);
+        reader.readAsArrayBuffer(file); // ArrayBuffer로 읽어야 인코딩 지정 가능
     });
 }
 
-// --- OCR 처리 ---
+// --- OCR 처리 (기존 유지) ---
 async function processImageOCR(fileOrUrl) {
+    // OCR 언어: 한국어('kor')만 사용
     const worker = await Tesseract.createWorker('kor');
     try {
         let imageSource;
@@ -283,7 +281,7 @@ async function processImageOCR(fileOrUrl) {
     }
 }
 
-// --- URL 처리 ---
+// --- URL 처리 (기존 유지) ---
 async function fetchAndProcessUrlContent(url) {
     if (!url) return;
     const PROXY_URL = 'https://api.allorigins.win/raw?url=';
@@ -300,9 +298,11 @@ async function fetchAndProcessUrlContent(url) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
         
+        // 노이즈 제거
         const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar';
         doc.querySelectorAll(selectorsToRemove).forEach(el => el.remove());
         
+        // 본문 추출
         const contentCandidates = Array.from(doc.querySelectorAll('article, main, .post, .entry, .content, #content'));
         let bestText = '';
         let maxTextLength = 0;
@@ -324,6 +324,7 @@ async function fetchAndProcessUrlContent(url) {
         
         let text = bestText.trim();
         
+        // Fallback
         if (text.length < 50) {
             const pTags = Array.from(doc.querySelectorAll('p'));
             text = pTags.map(p => p.textContent.trim()).join('\n\n');
@@ -360,7 +361,7 @@ async function fetchAndProcessUrlContent(url) {
     }
 }
 
-// --- 붙여넣기 처리 ---
+// --- 붙여넣기 처리 (모바일 자동 처리 제거) ---
 function processPastedText(text) {
     if (!text) return;
 
@@ -403,10 +404,12 @@ function handlePasteInTextViewer(e) {
         }
         return;
     } 
-    // 모바일 paste 시 버튼으로 처리
+    
+    // 모바일 paste 시 자동 처리 제거: 버튼 클릭으로 대체
+    // setTimeout 제거
 }
 
-// --- 파일 업로드 처리 ---
+// --- 파일 업로드 처리 (수정 및 복원) ---
 async function handleFiles(event) {
     clearInitialTextViewerContent();
     
@@ -432,16 +435,21 @@ async function handleFiles(event) {
         let fileObject = isImageFile ? file : null;
 
         if (!isImageFile) {
+            // 1. UTF-8 인코딩으로 파일 읽기 시도
             try {
                 content = await readTextFile(file, 'UTF-8');
             } catch (error) {
                 console.log(`파일 "${file.name}" UTF-8 읽기 실패. Fallback 시도.`);
+            }
+
+            // 2. 내용이 없거나 인코딩 오류 문자(\ufffd)를 포함하면 'windows-949'로 재시도
+            if (!content || content.includes('\ufffd') || content.trim().length === 0) {
                 try {
                     content = await readTextFile(file, 'windows-949');
                     if (content.includes('\ufffd')) {
-                        console.warn(`파일 "${file.name}"은(는) windows-949로도 완벽히 읽을 수 없습니다.`);
+                         console.warn(`파일 "${file.name}"은(는) windows-949로도 완벽히 읽을 수 없습니다.`);
                     } else {
-                        console.log(`파일 "${file.name}"을(를) windows-949로 성공적으로 읽었습니다.`);
+                         console.log(`파일 "${file.name}"을(를) windows-949로 성공적으로 읽었습니다.`);
                     }
                 } catch (error) {
                     console.error(`파일 "${file.name}" 인코딩 처리 최종 실패:`, error);
@@ -455,12 +463,12 @@ async function handleFiles(event) {
         return {
             id: fileId,
             name: file.name,
-            fullText: content || '',
-            fileObject: fileObject,
-            isImage: isImageFile,
+            fullText: content || '', // 텍스트 파일 내용 or 빈 문자열
+            fileObject: fileObject, // 이미지 파일 객체
+            isImage: isImageFile, // 이미지 여부
             chunks: [],
-            isProcessed: !isImageFile,
-            isOcrProcessing: false
+            isProcessed: !isImageFile, // 텍스트 파일은 바로 Processed, 이미지는 OCR 후 Processed
+            isOcrProcessing: false // OCR 처리 상태
         };
     });
 
@@ -481,17 +489,19 @@ async function handleFiles(event) {
         currentFileIndex = initialFilesCount;
     }
 
+    // 이미지 파일이 있다면 첫 번째 이미지 파일을 처리 시작
     const firstUnprocessedIndex = filesData.findIndex(f => !f.isProcessed);
     if (firstUnprocessedIndex !== -1) {
         processFile(firstUnprocessedIndex, true);
     } else if (currentFileIndex !== -1) {
+         // 이미지가 없고, 현재 파일이 있으면 렌더링
         renderTextViewer(currentFileIndex);
     }
     renderFileList();
     event.target.value = '';
 }
 
-// --- 파일 처리 ---
+// --- 파일 처리 (기존 유지) ---
 async function processFile(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || file.isProcessed || file.isOcrProcessing) return;
@@ -522,12 +532,15 @@ async function processFile(fileIndex, startReading) {
             file.isProcessed = true;
             console.log(`[OCR 완료] 파일 "${file.name}" OCR 처리 완료.`);
             
+            // 다음 처리/재생 로직으로 이동
             processFileChunks(fileIndex, startReading);
             
+            // 다음 대기 중인 이미지 파일 처리
             const nextUnprocessedIndex = filesData.findIndex((f, i) => !f.isProcessed && f.isImage && i > fileIndex);
             if (nextUnprocessedIndex !== -1) {
                 processFile(nextUnprocessedIndex, false);
             }
+
         } catch (error) {
             console.error('파일 처리 중 오류:', error);
             alert(`파일 처리 중 오류 발생: ${file.name}`);
@@ -536,18 +549,20 @@ async function processFile(fileIndex, startReading) {
             renderFileList();
         }
     } else if (!file.isImage) {
+        // 텍스트 파일은 이미 handleFiles에서 내용이 로드되었으므로 바로 청크 처리
         file.isProcessed = true;
         processFileChunks(fileIndex, startReading);
     }
 }
 
-// --- 청크 처리 ---
+// --- 청크 처리 (기존 유지) ---
 function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || !file.isProcessed) return;
 
+    // 이미 청크가 처리되었고, 다시 읽을 필요가 없으면 리턴
     if (file.chunks.length > 0 && file.chunks[0] !== '') {
-        if (startReading && currentFileIndex === fileIndex) {
+         if (startReading && currentFileIndex === fileIndex) {
             renderTextViewer(fileIndex);
             startReadingFromCurrentChunk();
         }
@@ -555,7 +570,7 @@ function processFileChunks(fileIndex, startReading) {
         return;
     }
 
-    const text = file.fullText || '';
+    const text = file.fullText || ''; // text가 undefined일 경우 빈 문자열로 대체
     if (!text) {
         file.isProcessed = true;
         file.chunks = [''];
@@ -568,9 +583,9 @@ function processFileChunks(fileIndex, startReading) {
         return;
     }
 
-    const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^\s]+/g) || [text];
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^\s]+/g) || [text]; // null 방지
     let currentChunk = '';
-    file.chunks = [];
+    file.chunks = []; // 청크 배열 초기화
 
     sentences.forEach((sentence) => {
         if (!sentence) return;
@@ -605,7 +620,7 @@ function processFileChunks(fileIndex, startReading) {
     renderFileList();
 }
 
-// --- 드래그 앤 드롭 ---
+// --- 드래그 앤 드롭 (기존 유지) ---
 function setupFullScreenDragAndDrop() {
     let dragCounter = 0;
 
@@ -639,6 +654,7 @@ function setupFullScreenDragAndDrop() {
         const files = dt.files;
 
         if (droppedText) {
+            // 이미지 URL 드롭은 여기서 처리 불가 (file.name이 없으므로 OCR 로직은 파일 업로드에만 집중)
             if (URL_PATTERN.test(droppedText)) {
                 fetchAndProcessUrlContent(droppedText);
             } else {
@@ -653,18 +669,19 @@ function setupFullScreenDragAndDrop() {
     }, false);
 }
 
-// --- 재생 컨트롤 ---
+// --- 재생 컨트롤 (기존 유지) ---
 async function startReadingFromCurrentChunk() {
     if (currentFileIndex === -1 || !filesData[currentFileIndex]) return;
 
     const file = filesData[currentFileIndex];
     if (!file.isProcessed) {
-        processFile(currentFileIndex, true);
+        // 파일이 처리 중이거나 대기 중일 경우 processFile 호출 (이미지 OCR을 시작하거나 완료)
+        processFile(currentFileIndex, true); 
         return;
     }
 
     if (file.chunks.length === 0) {
-        processFileChunks(currentFileIndex, true);
+        processFileChunks(currentFileIndex, true); // 청크 처리 재시도 (빈 파일인 경우)
         return;
     }
 
@@ -702,7 +719,7 @@ function speakNextChunk() {
     }
 
     currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
-    currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value) || synth.getVoices()[0];
+    currentUtterance.voice = synth.getVoices().find(v => v.name === $voiceSelect.value) || synth.getVoices()[0]; // 선택 음성 or 첫 번째 음성
     currentUtterance.rate = parseFloat($rateSlider.value);
     currentUtterance.pitch = 1;
 
@@ -777,7 +794,7 @@ function changeFile(newIndex) {
         stopReading();
         currentFileIndex = -1;
         renderTextViewer(-1);
-        renderFileList();
+        renderFileList(); // 파일이 없을 경우 목록 업데이트
         return;
     }
 
@@ -787,7 +804,7 @@ function changeFile(newIndex) {
     currentCharIndex = 0;
 
     if (!filesData[newIndex].isProcessed) {
-        processFile(newIndex, isSpeaking);
+        processFile(newIndex, isSpeaking); // processFile 호출로 이미지 처리 시작
     } else {
         renderTextViewer(newIndex);
         if (isSpeaking) {
@@ -797,7 +814,7 @@ function changeFile(newIndex) {
     renderFileList();
 }
 
-// --- 파일 목록 관리 ---
+// --- 파일 목록 관리 (기존 유지) ---
 function handleFileListItemClick(e) {
     const li = e.target.closest('li');
     if (!li) return;
@@ -892,7 +909,7 @@ function setupFileListSortable() {
     });
 }
 
-// --- UI 렌더링 ---
+// --- UI 렌더링 (이미지 상태 표시 복원) ---
 function renderTextViewer(fileIndex) {
     if (fileIndex === -1 || !filesData[fileIndex]) {
         $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
@@ -911,6 +928,7 @@ function renderTextViewer(fileIndex) {
         return;
     }
     
+    // 파일이 처리되었지만 내용이 없는 경우 (예: OCR 실패)
     if (file.fullText.startsWith('[OCR 실패]')) {
         $textViewer.innerHTML = `<p style="color:red;">${file.fullText}</p>`;
         return;
@@ -991,6 +1009,7 @@ function renderFileList() {
         deleteBtn.classList.add('delete-file-btn');
         deleteBtn.title = '삭제';
 
+        // 파일 처리 상태 표시 로직 (복원)
         if (!file.isProcessed) {
             let statusText = ' (⏳ 대기)';
             if (file.isImage) {
@@ -1017,7 +1036,7 @@ function renderFileList() {
     });
 }
 
-// --- 북마크 ---
+// --- 북마크 (기존 유지) ---
 function saveBookmark() {
     if (currentFileIndex === -1) return;
 
