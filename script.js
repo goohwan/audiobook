@@ -28,7 +28,7 @@ let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent); // 모바일 �
 // NOTE: DOMContentLoaded 시점에서 할당되므로, 임시로 전역 스코프에서 null/undefined 방지 처리
 const $ = (selector) => document.querySelector(selector); 
 let $fileInput, $fullScreenDropArea, $fileList, $textViewer, $voiceSelect, $rateSlider, $rateDisplay, $playPauseBtn;
-let $sequentialReadCheckbox, $clearAllFilesBtn, $mobileLoadBtn; // <-- $mobileLoadBtn 추가
+let $sequentialReadCheckbox, $clearAllFilesBtn;
 
 const INITIAL_TEXT_VIEWER_TEXT = '텍스트를 여기에 붙여넣거나(Ctrl+V 또는 Command-V) 파일을 화면에 드래그하여 업로드하세요.';
 const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
@@ -46,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $playPauseBtn = $('#play-pause-btn');
     $sequentialReadCheckbox = $('#sequential-read-checkbox');
     $clearAllFilesBtn = $('#clear-all-files-btn');
-    $mobileLoadBtn = $('#mobile-load-btn'); // <-- 버튼 할당
     
     if (!('speechSynthesis' in window)) {
         alert('Web Speech API를 지원하지 않는 브라우저입니다.');
@@ -81,8 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBookmark();
 
     setupTextViewerClickEvent();
-    // PC에서는 붙여넣기 시 즉시 처리
-    $textViewer.addEventListener('paste', handlePasteInTextViewer); 
+    $textViewer.addEventListener('paste', handlePasteInTextViewer);
     $textViewer.addEventListener('focus', clearInitialTextViewerContent);
 
     $sequentialReadCheckbox.addEventListener('change', (e) => {
@@ -92,11 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $clearAllFilesBtn.addEventListener('click', clearAllFiles);
     $fileList.addEventListener('click', handleFileListItemClick);
-    
-    // 모바일 로드 버튼 이벤트 리스너 추가
-    if ($mobileLoadBtn) {
-        $mobileLoadBtn.addEventListener('click', handleMobileLoadClick);
-    }
 
     setupFileListSortable();
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -216,7 +209,7 @@ function updateRateDisplay() {
     $rateDisplay.textContent = $rateSlider.value;
 }
 
-// --- 파일 처리 및 인코딩 변환 (기존 유지) ---
+// --- 파일 처리 및 인코딩 변환 (수정된 로직 유지) ---
 /**
  * ArrayBuffer를 TextDecoder를 사용하여 지정된 인코딩으로 디코딩합니다.
  */
@@ -332,7 +325,7 @@ async function fetchAndProcessUrlContent(url) {
         renderFileList();
         currentFileIndex = 0;
         processFileChunks(0, true);
-        // $textViewer.innerHTML = ''; // 버튼 클릭 시 뷰어를 비우는 로직은 handleMobileLoadClick에서 처리합니다.
+        $textViewer.innerHTML = '';
         
     } catch (error) {
         alert(`URL 로드 실패: ${error.message}`);
@@ -363,66 +356,42 @@ function processPastedText(text) {
     renderFileList();
     currentFileIndex = 0;
     processFileChunks(0, true);
-    // $textViewer.innerHTML = ''; // PC 버전은 handlePasteInTextViewer에서 처리합니다.
+    $textViewer.innerHTML = '';
 }
 
 function handlePasteInTextViewer(e) {
     clearInitialTextViewerContent();
     
-    // PC 환경에서만 붙여넣기 즉시 처리 (모바일은 버튼 클릭으로 유도)
-    if (!isMobile) { 
+    if (!isMobile) {
         e.preventDefault();
         const pasteData = (e.clipboardData || window.clipboardData).getData('text');
         const trimmedText = pasteData.trim();
         
         if (trimmedText) {
             if (URL_PATTERN.test(trimmedText)) {
-                fetchAndProcessUrlContent(trimmedText).finally(() => {
-                    $textViewer.innerHTML = ''; // URL 로드 후 뷰어 비우기
-                });
+                fetchAndProcessUrlContent(trimmedText);
             } else {
                 processPastedText(trimmedText);
-                $textViewer.innerHTML = ''; // 텍스트 처리 후 뷰어 비우기
             }
         }
         return;
     } 
     
-    // 모바일 환경에서는 텍스트가 뷰어에 붙여넣어지도록 허용
-    // 사용자는 '음성 로드' 버튼을 눌러야 처리됩니다.
-    
-    // 모바일에서 붙여넣기 후 뷰어 내용이 초기화되는 것을 막기 위해 setTimeout 제거
+    setTimeout(() => {
+        let extractedText = $textViewer.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
+        $textViewer.innerHTML = '';
+
+        if (extractedText && extractedText.replace(/\s+/g, ' ') !== INITIAL_TEXT_VIEWER_TEXT.replace(/\s+/g, ' ')) {
+            if (URL_PATTERN.test(extractedText)) {
+                fetchAndProcessUrlContent(extractedText);
+            } else {
+                processPastedText(extractedText);
+            }
+        } else {
+            $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+        }
+    }, 250);
 }
-
-// --- 모바일 음성 로드 버튼 처리 (복원된 기능) ---
-/**
- * 모바일 '음성 로드' 버튼 클릭 시 텍스트 뷰어의 텍스트 또는 URL을 처리합니다.
- */
-function handleMobileLoadClick() {
-    clearInitialTextViewerContent();
-    
-    // 텍스트 뷰어에서 현재 텍스트를 가져오고, 불필요한 공백을 정리합니다.
-    const viewerText = $textViewer.textContent.trim().replace(/(\n\s*){3,}/g, '\n\n');
-    const cleanedInitialText = INITIAL_TEXT_VIEWER_TEXT.trim().replace(/\s+/g, ' ');
-    
-    if (!viewerText || viewerText.replace(/\s+/g, ' ') === cleanedInitialText) {
-        alert("텍스트 뷰어에 텍스트나 URL을 먼저 붙여넣어 주세요.");
-        return;
-    }
-    
-    // 텍스트를 파일 목록에 추가하고 처리하기 위해 뷰어의 내용은 지웁니다.
-    // (이렇게 해야 새로 추가된 파일의 내용만 뷰어에 표시됩니다)
-    $textViewer.innerHTML = '';
-
-    if (URL_PATTERN.test(viewerText)) {
-        // URL인 경우 웹 콘텐츠를 로드
-        fetchAndProcessUrlContent(viewerText);
-    } else {
-        // 일반 텍스트인 경우 새 파일로 처리
-        processPastedText(viewerText);
-    }
-}
-
 
 // --- 파일 업로드 처리 (수정 및 복원) ---
 async function handleFiles(event) {
@@ -679,12 +648,9 @@ function setupFullScreenDragAndDrop() {
         if (droppedText) {
             // 이미지 URL 드롭은 여기서 처리 불가 (file.name이 없으므로 OCR 로직은 파일 업로드에만 집중)
             if (URL_PATTERN.test(droppedText)) {
-                fetchAndProcessUrlContent(droppedText).finally(() => {
-                    $textViewer.innerHTML = '';
-                });
+                fetchAndProcessUrlContent(droppedText);
             } else {
                 processPastedText(droppedText);
-                $textViewer.innerHTML = '';
             }
             return;
         }
