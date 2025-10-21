@@ -56,6 +56,7 @@ function debounce(func, timeout = 300) {
 
 function normalizeText(text) {
     // 텍스트에서 모든 공백과 줄바꿈을 제거하고 소문자로 변환하여 비교 용이하게 만듭니다.
+    // 또한 HTML 엔티티를 제거하여 순수한 텍스트만 남깁니다.
     return text.replace(/[\s\n\r<br>]/g, '').toLowerCase();
 }
 
@@ -67,13 +68,14 @@ function removePlaceholder() {
     const normalizedContent = normalizeText($textViewer.innerHTML);
     const normalizedPlaceholder = normalizeText(PLACEHOLDER_TEXT);
 
-    if (normalizedContent === normalizedPlaceholder) {
+    // 안내 문구가 있거나, 비어있을 경우에만 내용을 지웁니다.
+    if (normalizedContent === normalizedPlaceholder || $textViewer.innerHTML.trim() === '') {
         $textViewer.innerHTML = '';
     }
 }
 
 /**
- * @description: 텍스트 뷰어가 비어있을 경우 안내 문구를 다시 표시합니다.
+ * @description: 텍스트 뷰어에서 포커스가 해제되었을 때 안내 문구를 복원합니다.
  */
 function restorePlaceholder() {
     const content = $textViewer.innerText.trim();
@@ -99,6 +101,27 @@ $textViewer.addEventListener('blur', () => {
     // Blur 발생 후 내용이 변경되었을 수 있으므로 파일 목록도 업데이트할 수 있습니다 (필요하다면).
     // updateFilesList();
 });
+
+/**
+ * @description: [복구된 기능] 텍스트 뷰어에 내용이 붙여넣어졌을 때 처리합니다 (텍스트/URL).
+ */
+$textViewer.addEventListener('paste', (e) => {
+    e.preventDefault(); // 기본 붙여넣기 동작 방지
+
+    stopSpeaking(); // 발화 중지
+
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const pastedContent = clipboardData.getData('text');
+    
+    // 텍스트 뷰어를 비웁니다.
+    $textViewer.innerHTML = ''; 
+
+    // 붙여넣은 내용을 파일 목록으로 처리
+    if (pastedContent) {
+        handlePastedContent(pastedContent);
+    }
+});
+
 
 // --- 기존의 나머지 함수들은 그대로 유지합니다 ---
 
@@ -216,14 +239,15 @@ function chunkText(text) {
     return chunks.filter(c => c.length > 0);
 }
 
-// OCR 처리 (미구현 상태)
+// [복구된 기능] OCR 처리 (미구현 상태)
 async function processOcr(fileObject, fileId) {
     // TODO: 여기에 실제 OCR API 호출 로직을 구현합니다.
     // 현재는 더미 데이터로 처리합니다.
     return new Promise(resolve => {
+        console.log(`OCR Processing for fileId: ${fileId} (DUMMY START)`);
         setTimeout(() => {
-            console.log(`OCR Processing for fileId: ${fileId} (DUMMY)`);
             const dummyText = `파일 ${fileId} (${fileObject.name}) 의 OCR 결과입니다. 이 텍스트는 이미지에서 추출된 내용을 시뮬레이션합니다. 실제 서비스에서는 OCR 엔진을 사용해야 합니다.`;
+            console.log(`OCR Processing for fileId: ${fileId} (DUMMY END)`);
             resolve(dummyText);
         }, 1500); // 1.5초 지연 시뮬레이션
     });
@@ -259,7 +283,7 @@ async function updateFileData(fileId, update) {
 }
 
 
-// 파일 추가
+// [복구된 기능] 파일 추가
 async function addFile(file) {
     if (filesData.length >= MAX_FILES) {
         console.warn(`최대 파일 개수(${MAX_FILES}) 초과`);
@@ -306,8 +330,11 @@ async function addFile(file) {
     }
 }
 
-// URL/텍스트 붙여넣기 처리
+// [복구된 기능] URL/텍스트 붙여넣기 처리
 function handlePastedContent(content) {
+    removePlaceholder(); // 붙여넣기 전에 안내 문구 제거
+    stopSpeaking();
+
     const fileId = crypto.randomUUID();
     let fileName, fullText;
 
@@ -332,11 +359,10 @@ function handlePastedContent(content) {
     };
 
     filesData.push(newFile);
-    if (currentFileIndex === -1) {
-        setCurrentFile(filesData.length - 1);
-    } else {
-        updateFilesList();
-    }
+
+    // 새롭게 추가된 파일로 바로 이동
+    setCurrentFile(filesData.length - 1);
+    updateFilesList();
 }
 
 // --- 파일 목록 UI 및 드래그 앤 드롭 ---
@@ -344,6 +370,10 @@ function handlePastedContent(content) {
 function handleDrop(e) {
     e.preventDefault();
     $dropArea.style.display = 'none';
+
+    // 드롭 발생 시 텍스트 뷰어의 내용을 지웁니다.
+    removePlaceholder();
+    stopSpeaking();
 
     if (e.dataTransfer.items) {
         [...e.dataTransfer.items].forEach((item) => {
@@ -474,6 +504,7 @@ function deleteFile(index) {
         } else if (filesData.length === 0) {
             // 파일이 모두 삭제된 경우
             currentFileIndex = -1;
+            restorePlaceholder(); // 안내 문구 복원
         }
 
         updateFilesList();
