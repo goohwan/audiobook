@@ -38,6 +38,10 @@ h1 {
     margin-bottom: 30px;
 }
 
+.disqus-section {
+    margin-top:35px;
+}
+
 #full-screen-drop-area {
     position: fixed;
     top: 0;
