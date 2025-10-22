@@ -752,6 +752,7 @@ function togglePlayPause() {
         isPaused = true;
         $playPauseBtn.textContent = '▶️';
         releaseWakeLock();
+        console.log('wake lock 해제');
     } else if (isSpeaking && isPaused) {
         if (isMobile) {
             speakNextChunk();
@@ -761,6 +762,7 @@ function togglePlayPause() {
         isPaused = false;
         $playPauseBtn.textContent = '⏸️';
         requestWakeLock();
+        console.log('wake lock 가동');
     } else {
         startReadingFromCurrentChunk();
     }
