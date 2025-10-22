@@ -52,10 +52,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
+    // VoiceList 로드 및 기본 설정 로드
     if (synth.getVoices().length > 0) {
         populateVoiceList();
     }
     synth.onvoiceschanged = populateVoiceList;
+
+    // 북마크 로드 (이어듣기 프롬프트 포함)
+    loadBookmark();
 
     $fileInput.addEventListener('change', handleFiles);
     setupFullScreenDragAndDrop();
@@ -75,8 +79,6 @@ document.addEventListener('DOMContentLoaded', () => {
             speakNextChunk();
         }
     });
-
-    loadBookmark();
 
     setupTextViewerClickEvent();
     $textViewer.addEventListener('paste', handlePasteInTextViewer);
@@ -168,7 +170,7 @@ async function handleVisibilityChange() {
 }
 
 window.addEventListener('beforeunload', () => {
-    saveBookmark();
+    saveBookmark(); // 파일 목록과 현재 위치를 포함하여 북마크 저장
     if (synth.speaking) {
         synth.cancel();
     }
@@ -223,24 +225,17 @@ function populateVoiceList() {
 
     koreanVoices.forEach(option => $voiceSelect.appendChild(option));
 
+    // loadBookmark에서 북마크 설정을 처리하고, 여기서는 Voice 선택만 처리합니다.
     const savedBookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
-    let selectedVoice = null;
-    
-    if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
-        selectedVoice = savedBookmark.settings.voice;
-    } else if (preferredVoiceName) {
-        selectedVoice = preferredVoiceName;
-    } else if (koreanVoices.length > 0) {
-        selectedVoice = koreanVoices[0].value;
-    }
+    let selectedVoice = savedBookmark?.settings?.voice || preferredVoiceName || (koreanVoices.length > 0 ? koreanVoices[0].value : null);
 
-    if (selectedVoice) {
+    if (selectedVoice && $voiceSelect.querySelector(`option[value="${selectedVoice}"]`)) {
          $voiceSelect.value = selectedVoice;
+    } else if (koreanVoices.length > 0) {
+        $voiceSelect.value = koreanVoices[0].value;
     }
-
-    if (savedBookmark && savedBookmark.settings) {
-        $rateSlider.value = savedBookmark.settings.rate;
-    }
+    
+    // rate display 초기화는 loadBookmark에서 처리되거나, 처음 로드시 기본값으로 설정
     updateRateDisplay();
 }
 
@@ -554,15 +549,19 @@ function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || !file.isProcessed) return;
 
-    if (file.chunks.length > 0 && file.chunks[0] !== '') {
-        if (startReading && currentFileIndex === fileIndex) {
+    // 북마크 로드 시 이미 chunks가 채워져 있을 수 있습니다.
+    if (file.chunks.length > 0 && file.chunks[0] !== '' && !file.fullText) {
+         // fullText가 없는데 chunks가 있는 경우, 복원된 청크 사용
+         console.log(`[복원] 파일 "${file.name}" 복원된 청크 사용. 총 ${file.chunks.length}개 청크.`);
+         if (startReading && currentFileIndex === fileIndex) {
             renderTextViewer(fileIndex);
             startReadingFromCurrentChunk();
         }
         renderFileList();
         return;
     }
-
+    
+    // fullText가 없거나, fullText는 있는데 chunks가 비어있는 경우 (일반적인 처리)
     const text = file.fullText || '';
     if (!text) {
         file.isProcessed = true;
@@ -570,7 +569,7 @@ function processFileChunks(fileIndex, startReading) {
         console.warn(`파일 "${file.name}"의 텍스트가 비어 있습니다.`);
         if (startReading && currentFileIndex === fileIndex) {
             renderTextViewer(fileIndex);
-            startReadingFromCurrentChunk();
+            // startReadingFromCurrentChunk(); // 빈 파일은 재생하지 않음
         }
         renderFileList();
         return;
@@ -871,7 +870,7 @@ function clearAllFiles() {
     stopReading();
     filesData = [];
     currentFileIndex = -1;
-    localStorage.removeItem('autumnReaderBookmark');
+    localStorage.removeItem('autumnReaderBookmark'); // 북마크 전체 삭제
     renderFileList();
     $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
 }
@@ -1029,13 +1028,39 @@ function renderFileList() {
 
 // --- 북마크 ---
 function saveBookmark() {
-    if (currentFileIndex === -1) return;
+    // filesData가 비어있으면 전체 북마크를 삭제합니다.
+    if (filesData.length === 0) {
+        localStorage.removeItem('autumnReaderBookmark');
+        return;
+    }
+
+    // 파일 객체(fileObject)와 OCR 처리 중인 파일은 저장하지 않습니다.
+    const savableFilesData = filesData.filter(file => !file.isOcrProcessing).map(file => ({
+        id: file.id,
+        name: file.name,
+        // fullText는 용량이 크므로 isImage가 아니거나, isImage라도 처리가 완료된 경우만 저장
+        fullText: (!file.isImage || file.isProcessed) ? file.fullText : '', 
+        isImage: file.isImage, 
+        chunks: file.chunks, // 청크 저장
+        isProcessed: file.isProcessed,
+        isOcrProcessing: false 
+    }));
+    
+    // 현재 파일 인덱스가 유효한지 확인하고, 유효하지 않다면 0으로 설정
+    const effectiveFileIndex = currentFileIndex >= 0 && currentFileIndex < savableFilesData.length 
+        ? currentFileIndex 
+        : (savableFilesData.length > 0 ? 0 : -1);
+
+    if (effectiveFileIndex === -1) {
+        localStorage.removeItem('autumnReaderBookmark');
+        return;
+    }
 
     const bookmarkData = {
-        fileId: filesData[currentFileIndex].id,
-        fileName: filesData[currentFileIndex].name,
+        currentFileIndex: effectiveFileIndex,
         chunkIndex: currentChunkIndex,
         isSequential: isSequential,
+        files: savableFilesData, // 파일 목록 전체 저장
         settings: {
             voice: $voiceSelect.value,
             rate: $rateSlider.value
@@ -1049,6 +1074,8 @@ function loadBookmark() {
     if (!data) return;
 
     const bookmark = JSON.parse(data);
+    
+    // 1. 설정 로드
     if (bookmark.settings) {
         $rateSlider.value = bookmark.settings.rate;
         updateRateDisplay();
@@ -1057,5 +1084,47 @@ function loadBookmark() {
     isSequential = bookmark.isSequential !== undefined ? bookmark.isSequential : true;
     if ($sequentialReadCheckbox) {
         $sequentialReadCheckbox.checked = isSequential;
+    }
+
+    // 2. 파일 목록 복원
+    if (bookmark.files && bookmark.files.length > 0) {
+        filesData = bookmark.files.map(file => ({
+            ...file,
+            fileObject: null, 
+            isOcrProcessing: false // 복원 시 OCR 상태 초기화
+        }));
+        
+        renderFileList(); 
+
+        // 3. 이어듣기 프롬프트 및 재생 시작
+        const fileToResume = filesData[bookmark.currentFileIndex];
+        if (fileToResume && confirm(`지난번 읽던 파일: "${fileToResume.name}"의 ${bookmark.chunkIndex + 1}번째 부분부터 이어서 들으시겠습니까?`)) {
+            currentFileIndex = bookmark.currentFileIndex;
+            currentChunkIndex = bookmark.chunkIndex;
+            currentCharIndex = 0; 
+            
+            if (!fileToResume.isProcessed) {
+                 // 복원된 파일이 미처리 상태인 경우 (예: OCR이 필요한 이미지) 처리 시작
+                processFile(currentFileIndex, true); 
+            } else {
+                // 이미 청크까지 처리된 경우 바로 뷰어 렌더링 후 재생 시작
+                renderTextViewer(currentFileIndex);
+                startReadingFromCurrentChunk();
+            }
+            
+            renderFileList(); 
+            
+        } else {
+            // "아니오" 선택 시, 파일 목록은 유지하되, 현재 인덱스는 초기화
+            currentFileIndex = 0;
+            currentChunkIndex = 0;
+            currentCharIndex = 0;
+            if (filesData.length > 0) {
+                 renderTextViewer(currentFileIndex);
+                 renderFileList();
+            } else {
+                $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+            }
+        }
     }
 }
