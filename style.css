@@ -171,7 +171,7 @@ h1 {
     display: none;
 }
 
-@media (max-width: 1400px) and (min-width: 451px) {
+@media (max-width: 1500px) and (min-width: 451px) {
 
     .mobile-only {
         display: block;
