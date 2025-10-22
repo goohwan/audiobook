@@ -178,7 +178,7 @@ h1 {
 
 @media (max-width: 1500px) and (min-width: 451px) {
     .container {
-        max-width: 100%;
+        max-width: 95%;
         padding: 30px;
     }
 
@@ -208,7 +208,7 @@ h1 {
 
 @media (max-width: 450px) {
     .container {
-        max-width: 100%;
+        max-width: 95%;
         padding: 30px;
     }
 
