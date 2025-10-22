@@ -35,7 +35,8 @@ h1 {
 }
 
 .file-list-section, .text-viewer-section, .control-section {
-    margin-bottom: 30px;
+    margin:0 30px 30px 0;
+
 }
 
 .disqus-section {
