@@ -200,7 +200,7 @@ h1 {
 @media (max-width: 450px) {
     .container {
         max-width: 100%;
-        padding: 10px;
+        padding: 20px;
     }
 
     #left_pannel {
