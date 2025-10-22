@@ -5,7 +5,7 @@ const VISIBLE_CHUNKS = 10; // 가상화: 한 번에 렌더링할 청크 수
 const URL_PATTERN = /^(http|https):\/\/[^\s$.?#].[^\s]*$/i; // URL 인식 패턴
 
 // --- 파일 관련 상수 추가 ---
-const TEXT_EXTENSIONS = ['.txt'];
+const TEXT_EXTENSIONS = ['.txt', 'pdf'];
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
 const ALLOWED_EXTENSIONS = [...TEXT_EXTENSIONS, ...IMAGE_EXTENSIONS];
 
@@ -752,6 +752,7 @@ function togglePlayPause() {
         isPaused = true;
         $playPauseBtn.textContent = '▶️';
         releaseWakeLock();
+        console.log('wake lock 해제');
     } else if (isSpeaking && isPaused) {
         if (isMobile) {
             speakNextChunk();
@@ -761,6 +762,7 @@ function togglePlayPause() {
         isPaused = false;
         $playPauseBtn.textContent = '⏸️';
         requestWakeLock();
+        console.log('wake lock 가동');
     } else {
         startReadingFromCurrentChunk();
     }
