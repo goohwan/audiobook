@@ -171,15 +171,7 @@ h1 {
     display: none;
 }
 
-@media (max-width: 1300px) {
-    .container {
-        max-width: 100%;
-        padding: 10px;
-    }
-
-    #left_pannel {
-        padding: 0;
-    }
+@media (max-width: 1300px) and (min-width: 451px) {
 
     .mobile-only {
         display: block;
@@ -202,5 +194,16 @@ h1 {
 
     .mobile-buttons button:hover {
         background-color: #FFC107;
+    }
+}
+
+@media (max-width: 450px) {
+    .container {
+        max-width: 100%;
+        padding: 10px;
+    }
+
+    #left_pannel {
+        padding: 0;
     }
 }
