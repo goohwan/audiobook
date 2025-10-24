@@ -37,13 +37,51 @@
         }
         return gk_fileData[filename] || "";
         }
-        </script><!DOCTYPE html>
+        </script>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="텍스트 파일을 업로드하여 오디오북으로 변환하는 서비스입니다.">
     <title>책 읽어주는 가을이</title>
+        <script>(function() {
+            // 1. 허용된 도메인 정의
+            const allowedHostname = 'audiobook.goohwan.net';
+            
+            // 2. 현재 실행 중인 환경의 정보 가져오기
+            const currentHostname = window.location.hostname;
+            const currentProtocol = window.location.protocol;
+            
+            // 3. 리디렉션할 최종 URL 정의
+            // (보통 서비스의 메인 URL로 설정합니다.)
+            const redirectURL = 'https://audiobook.goohwan.net/';
+            
+            // 4. 로컬 실행 또는 비허용 도메인 여부 확인
+            let shouldRedirect = false;
+
+            // A. 로컬 파일 시스템에서 실행 중인 경우 (file:// 프로토콜)
+            if (currentProtocol === 'file:') {
+                shouldRedirect = true;
+            } 
+            // B. 도메인이 허용된 도메인과 일치하지 않는 경우
+            else if (currentHostname !== allowedHostname) {
+                // 'localhost'나 '127.0.0.1'에서의 개발을 허용하고 싶다면 이 조건을 수정해야 합니다.
+                shouldRedirect = true;
+            }
+            
+            // 5. 리디렉션 실행
+            if (shouldRedirect) {
+                // 현재 페이지를 redirectURL로 강제로 이동
+                window.location.replace(redirectURL); 
+                // window.location.replace()를 사용하면 뒤로가기 버튼으로 이전 로컬 페이지로 돌아갈 수 없습니다.
+            }
+        })();
+
+        // 리디렉션이 발생하지 않은 경우에만 아래에 핵심 오디오북 스크립트 코드가 실행됩니다.
+        // 예를 들어: initializeAudiobookService();
+        </script>
+    
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/nosleep.js@1/dist/NoSleep.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
