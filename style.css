@@ -7,6 +7,10 @@ body {
     overflow-x: hidden;
 }
 
+div#disqus_thread iframe[sandbox] {
+max-height: 0px !important;
+}
+
 .container {    
     display: block; 
     width: 95%;
