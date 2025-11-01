@@ -2,125 +2,116 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>텍스트 & 이미지 오디오북 변환기</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
-    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js';</script>
-    <script src="https://unpkg.com/tesseract.js@2.1.4/dist/tesseract.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/nosleep.js@0.12.0/dist/NoSleep.min.js"></script>
-    <!-- XLSX for Excel file reading -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-</head>
-<body>
-    <div class="container panel-collapsed"> <!-- panel-collapsed 클래스 추가 -->
-        <header>
-            <h1>오디오북 메이커 (TTS / OCR 지원)</h1>
-        </header>
-
-        <!-- 메인 콘텐츠를 감싸는 유연한 컨테이너 -->
-        <div class="main-flex-container">
-
-            <div id="left_panel">
-                <div class="file-management-section">
-                    <h2>파일 관리 및 첨부</h2>
-                    <div id="drop-area">
-                        <p>여기에 텍스트, 이미지, PDF, 엑셀 파일을 드래그 & 드롭하거나 클릭하여 첨부하세요 (최대 50개)</p>
-                        <input type="file" id="file-input" accept=".txt,.pdf,.jpg,.jpeg,.png,.gif,.webp,.tiff,.tif,.xlsx,.xls,.csv" multiple style="display: none;">
-                        <ul id="file-list"></ul>
-                    </div>
-
-                    <div class="control-section">
-                        <label for="voice-select">목소리 선택:</label>
-                        <select id="voice-select"></select>
-                        <label for="rate-slider">재생 속도:</label>
-                        <input type="range" id="rate-slider" min="0.5" max="2" step="0.1" value="1">
-                        <span id="rate-display">1</span>
-                        <div class="playback-controls"> 
-                            <button id="play-pause-btn">▶️</button>
-                            <button id="stop-btn">⏹️</button>
-                            <button id="prev-file-btn">⏮️</button>
-                            <button id="next-file-btn">⏭️</button>
-                        </div>
-                        <label><input type="checkbox" id="sequential-read-checkbox" checked> 정주행</label>
-                        <button id="clear-all-files-btn">전체 삭제</button>
-                    </div>
-                </div>
-                
-                <div class="text-viewer-section">
-                    <!-- 모바일용 토글 버튼: 텍스트 뷰어 위에 위치 -->
-                    <button id="mobile-toggle-btn" class="mobile-only toggle-btn">Right Panel 열기</button>
-                    
-                    <h2>텍스트 뷰어</h2>
-                    <div class="mobile-only mobile-buttons">
-                        <button id="mobile-file-upload-btn">파일첨부</button>
-                        <button id="mobile-load-voice-btn">음성로드</button>
-                    </div>
-                    <div id="text-viewer" contenteditable="true">
-                        <p>텍스트, 이미지 파일을 드래그하여 첨부하거나 텍스트/URL을 붙여넣어 오디오북으로 변환하세요. 텍스트를 수정하거나 내용을 직접 입력할 수도 있습니다.</p>
-                        <p>첨부된 파일이 있으면 여기에 그 내용이 표시됩니다. OCR 진행 중인 이미지 파일은 여기에 OCR 결과가 표시될 예정입니다.</p>
-                    </div>
-                </div>
-            </div> <!-- End of #left_panel -->
-
-            <!-- PC용 토글 버튼: Left Panel과 Right Panel 사이에 위치 -->
-            <button id="pc-toggle-btn" class="pc-only toggle-btn">
-                <span class="icon">▶</span>
-            </button>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="텍스트 파일을 업로드하여 오디오북으로 변환하는 서비스입니다.">
+    <title>책 읽어주는 가을이</title>
+        <script>(function() {
+            // 1. 허용된 도메인 정의
+            const allowedHostname = 'audiobook.goohwan.net';
             
-            <div id="right_panel">
-                <h2>추가 정보 (Right Panel)</h2>
-                <div class="right-panel-content">
-                    <p>이 패널은 PC 버전에서는 왼쪽 패널의 콘텐츠를 보조하며 오른쪽으로 확장됩니다.</p>
-                    <p>모바일 버전에서는 전체 화면을 차지하게 됩니다.</p>
-                    <p>토글 버튼을 다시 눌러 닫거나, 모바일에서는 상단의 버튼을 눌러 닫을 수 있습니다.</p>
-                    <p>여기에 북마크, 노트, 추가 설정 등 보조 기능들을 배치할 수 있습니다.</p>
-                </div>
-            </div> <!-- End of #right_panel -->
+            // 2. 현재 실행 중인 환경의 정보 가져오기
+            const currentHostname = window.location.hostname;
+            const currentProtocol = window.location.protocol;
+            
+            // 3. 리디렉션할 최종 URL 정의
+            // (보통 서비스의 메인 URL로 설정합니다.)
+            const redirectURL = 'https://audiobook.goohwan.net/';
+            
+            // 4. 로컬 실행 또는 비허용 도메인 여부 확인
+            let shouldRedirect = false;
 
-        </div> <!-- End of .main-flex-container -->       
-    </div>
-    <script type="module" src="script.js"></script>
-    <script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex))._csv;
-                
-                return csv;
-
-            } catch (error) {
-                console.error("Error reading XLSX file:", error);
-                return '엑셀 파일을 읽는 중 오류가 발생했습니다.';
+            // A. 로컬 파일 시스템에서 실행 중인 경우 (file:// 프로토콜)
+            if (currentProtocol === 'file:') {
+                shouldRedirect = true;
+            } 
+            // B. 도메인이 허용된 도메인과 일치하지 않는 경우
+            else if (currentHostname !== allowedHostname) {
+                // 'localhost'나 '127.0.0.1'에서의 개발을 허용하고 싶다면 이 조건을 수정해야 합니다.
+                shouldRedirect = true;
             }
-        }
-        return gk_fileData[filename];
-        }
-    </script>
+            
+            // 5. 리디렉션 실행
+            if (shouldRedirect) {
+                // 현재 페이지를 redirectURL로 강제로 이동
+                window.location.replace(redirectURL); 
+                // window.location.replace()를 사용하면 뒤로가기 버튼으로 이전 로컬 페이지로 돌아갈 수 없습니다.
+            }
+        })();
+
+        // 리디렉션이 발생하지 않은 경우에만 아래에 핵심 오디오북 스크립트 코드가 실행됩니다.
+        // 예를 들어: initializeAudiobookService();
+        </script>
+    
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/nosleep.js@1/dist/NoSleep.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3474389046240414" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    </head>
+<body>
+    <div id="full-screen-drop-area">파일을 여기에 드롭하세요</div>
+
+    <header>
+        <h1>책 읽어주는 가을이</h1>        
+    </header>
+    
+    <div class="container">
+        <div id="left_panel">
+            <div class="file-list-section">
+                <h2>List</h2>
+                <input type="file" id="file-input" accept="text/plain,image/*" multiple style="display: none;">
+                <ul id="file-list"></ul>
+            </div>
+
+            <div class="control-section">
+                <label for="voice-select">목소리 선택:</label>
+                <select id="voice-select"></select>
+                <label for="rate-slider">재생 속도:</label>
+                <input type="range" id="rate-slider" min="0.5" max="2" step="0.1" value="1">
+                <span id="rate-display">1</span>
+                <div class="playback-controls"> 
+                    <button id="play-pause-btn">▶️</button>
+                    <button id="stop-btn">⏹️</button>
+                    <button id="prev-file-btn">⏮️</button>
+                    <button id="next-file-btn">⏭️</button>
+                </div>
+                <label><input type="checkbox" id="sequential-read-checkbox" checked> 정주행</label>
+                <button id="clear-all-files-btn">전체 삭제</button>
+            </div>
+            
+            <div id="url_iframe_panel_mobile" class="url-iframe-panel mobile-only">
+                <h2>웹 페이지 보기</h2>
+                <div class="url-input-container">
+                    <input type="text" id="url-input-mobile" placeholder="URL을 입력하세요">
+                    <button id="load-url-btn-mobile">Load</button>
+                </div>
+                <iframe id="content-frame-mobile" name="content-frame-mobile" src="about:blank" title="로드된 웹페이지"></iframe>
+            </div>
+
+            <div class="text-viewer-section">
+                <h2>텍스트 뷰어</h2>
+                <div class="mobile-only mobile-buttons">
+                    <button id="mobile-file-upload-btn">파일첨부</button>
+                    <button id="mobile-load-voice-btn">음성로드</button>
+                </div>
+                <div id="text-viewer" contenteditable="true">
+                    <p>텍스트, 이미지 파일을 드래그하여 첨부하거나 텍스트/URL을 붙여넣어 오디오북으로 변환하세요! 모바일에선 파일첨부, 음성로드 버튼을 활용해주세요</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="right_panel" class="url-iframe-panel desktop-only">
+            <h2>웹 페이지 보기</h2>
+            <div class="url-input-container">
+                <input type="text" id="url-input-desktop" placeholder="URL을 입력하세요">
+                <button id="load-url-btn-desktop">Load</button>
+            </div>
+            <iframe id="content-frame-desktop" name="content-frame-desktop" src="about:blank" title="로드된 웹페이지"></iframe>
+        </div>
+    </div>
+    <div class="disqus-section">
+        <div id="disqus_thread"></div>
+    </div>
+    <script src="script.js"></script>
 </body>
 </html>
