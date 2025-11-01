@@ -299,3 +299,31 @@ h2 {
         font-weight: bold;
     }
 }
+
+
+/* -------------------------------------- */
+/* --- Scrollbar Customization (Nightfall) --- */
+/* -------------------------------------- */
+
+/* 스크롤바 너비/높이 지정 */
+#text-viewer::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+/* 스크롤바 배경 트랙 */
+#text-viewer::-webkit-scrollbar-track {
+    background: #2d3748; /* 컨트롤 배경색과 유사하게 설정 */
+    border-radius: 10px;
+}
+
+/* 스크롤바 핸들 (실제 움직이는 부분) */
+#text-viewer::-webkit-scrollbar-thumb {
+    background-color: #4a5568; /* 하이라이트 배경색과 유사하게 설정 */
+    border-radius: 10px;
+}
+
+/* 스크롤바 핸들 호버 시 */
+#text-viewer::-webkit-scrollbar-thumb:hover {
+    background-color: #6a809b; /* 버튼 기본 색상과 유사하게 설정 */
+}
