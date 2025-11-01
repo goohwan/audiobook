@@ -25,7 +25,7 @@ max-height: 0px !important;
     padding: 0;
     box-sizing: border-box;
     max-width: 700px; /* left_panel 최대 너비 지정 */
-    margin: 0 auto; /* 중앙 정렬 */
+    margin: 0 0 0 auto; /* 중앙 정렬 */
 }
 
 /* --- Right Panel (iframe 및 URL 입력) --- */
