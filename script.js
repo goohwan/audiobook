@@ -150,12 +150,19 @@ document.addEventListener('DOMContentLoaded', () => {
     setupFileListSortable();
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // --- URL/IFRAME 이벤트 설정 ---
+    // --- URL/IFRAME 이벤트 설정 시작 ---
     if ($loadUrlBtnMobile) {
         $loadUrlBtnMobile.addEventListener('click', () => loadUrl($urlInputMobile.value, $contentFrameMobile));
         $urlInputMobile.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') loadUrl($urlInputMobile.value, $contentFrameMobile);
         });
+        
+        // [수정] 모바일 iframe 주소 변경 감지 리스너 추가
+        if ($contentFrameMobile) {
+            $contentFrameMobile.addEventListener('load', () => {
+                updateUrlInputOnIframeLoad($contentFrameMobile, $urlInputMobile);
+            });
+        }
     }
 
     if ($loadUrlBtnDesktop) {
@@ -164,9 +171,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Enter') loadUrl($urlInputDesktop.value, $contentFrameDesktop);
         });
         
-        // 데스크톱 초기값 설정 및 로드 (선택 사항)
-        // $urlInputDesktop.value = "https://www.google.com";
-        // loadUrl($urlInputDesktop.value, $contentFrameDesktop); 
+        // [수정] 데스크톱 iframe 주소 변경 감지 리스너 추가
+        if ($contentFrameDesktop) {
+            $contentFrameDesktop.addEventListener('load', () => {
+                updateUrlInputOnIframeLoad($contentFrameDesktop, $urlInputDesktop);
+            });
+        }
     }
     // --- URL/IFRAME 이벤트 설정 끝 ---
 
@@ -220,6 +230,26 @@ function loadUrl(url, iframeElement) {
     iframeElement.src = finalUrl;
     
     console.log("Iframe 주소 변경됨:", finalUrl);
+}
+
+// --- iframe 주소 변경 시 URL 입력창 업데이트 함수 추가 ---
+function updateUrlInputOnIframeLoad(iframeElement, urlInputElement) {
+    try {
+        // Same-Origin Policy 때문에 다른 도메인의 iframe URL 접근은 오류를 발생시킵니다.
+        // 접근이 가능한 경우(동일 도메인 또는 정책 허용)에만 URL을 업데이트합니다.
+        const iframeUrl = iframeElement.contentWindow.location.href;
+        
+        // about:blank는 건너뜁니다.
+        if (iframeUrl && iframeUrl !== 'about:blank') {
+            urlInputElement.value = iframeUrl;
+            console.log(`URL 입력창 업데이트됨 (동일 출처): ${iframeUrl}`);
+        }
+    } catch (e) {
+        // Cross-Origin (다른 도메인) 접근 시 발생하는 오류를 무시합니다.
+        console.warn("Iframe URL 접근 불가 (Same-Origin Policy 위반). URL 입력창은 업데이트되지 않았습니다.");
+        // 사용자에게 현재 iframe이 다른 도메인을 로드 중임을 알릴 수 있습니다.
+        // urlInputElement.value = "외부 페이지 (URL 접근 제한됨)"; 
+    }
 }
 // --- URL 로드 함수 끝 ---
 
