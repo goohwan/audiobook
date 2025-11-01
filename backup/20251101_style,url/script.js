@@ -1,3 +1,45 @@
+// --- index.html에서 이동된 XLSX 처리 유틸리티 ---
+var gk_isXlsx = false;
+var gk_xlsxFileLookup = {};
+var gk_fileData = {};
+function filledCell(cell) {
+  return cell !== '' && cell != null;
+}
+function loadFileData(filename) {
+if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+    try {
+        var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+        var firstSheetName = workbook.SheetNames[0];
+        var worksheet = workbook.Sheets[firstSheetName];
+
+        // Convert sheet to JSON to filter blank rows
+        var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+        // Filter out blank rows (rows where all cells are empty, null, or undefined)
+        var filteredData = jsonData.filter(row => row.some(filledCell));
+
+        // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+        var headerRowIndex = filteredData.findIndex((row, index) =>
+          row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+        );
+        // Fallback
+        if (headerRowIndex === -1 || headerRowIndex > 25) {
+          headerRowIndex = 0;
+        }
+
+        // Convert filtered JSON back to CSV
+        var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+        csv = XLSX.utils.utils.sheet_to_csv(csv, { header: 1 });
+        return csv;
+    } catch (e) {
+        console.error(e);
+        return "";
+    }
+}
+return gk_fileData[filename] || "";
+}
+// --------------------------------------------------
+
+
 // --- 전역 변수 설정 ---
 const MAX_FILES = 50; // 파일 첨부 최대 개수 50개
 const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수
@@ -30,6 +72,10 @@ const $ = (selector) => document.querySelector(selector);
 let $fileInput, $fullScreenDropArea, $fileList, $textViewer, $voiceSelect, $rateSlider, $rateDisplay, $playPauseBtn;
 let $sequentialReadCheckbox, $clearAllFilesBtn;
 
+// URL/IFRAME 관련 DOM 변수 추가
+let $urlInputMobile, $loadUrlBtnMobile, $contentFrameMobile;
+let $urlInputDesktop, $loadUrlBtnDesktop, $contentFrameDesktop;
+
 const INITIAL_TEXT_VIEWER_TEXT = '텍스트, 이미지 파일을 드래그하여 첨부하거나 텍스트/URL을 붙여넣어 오디오북으로 변환하세요! 모바일에선 파일첨부, 음성로드 버튼을 활용해주세요';
 const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
 
@@ -47,15 +93,27 @@ document.addEventListener('DOMContentLoaded', () => {
     $sequentialReadCheckbox = $('#sequential-read-checkbox');
     $clearAllFilesBtn = $('#clear-all-files-btn');
     
+    // URL/IFRAME DOM 요소 할당 (데스크톱 및 모바일)
+    $urlInputMobile = $('#url-input-mobile');
+    $loadUrlBtnMobile = $('#load-url-btn-mobile');
+    $contentFrameMobile = $('#content-frame-mobile');
+    $urlInputDesktop = $('#url-input-desktop');
+    $loadUrlBtnDesktop = $('#load-url-btn-desktop');
+    $contentFrameDesktop = $('#content-frame-desktop');
+
     if (!('speechSynthesis' in window)) {
         alert('Web Speech API를 지원하지 않는 브라우저입니다.');
         return;
     }
 
+    // VoiceList 로드 및 기본 설정 로드
     if (synth.getVoices().length > 0) {
         populateVoiceList();
     }
     synth.onvoiceschanged = populateVoiceList;
+
+    // 북마크 로드 (이어듣기 프롬프트 포함)
+    loadBookmark();
 
     $fileInput.addEventListener('change', handleFiles);
     setupFullScreenDragAndDrop();
@@ -76,8 +134,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    loadBookmark();
-
     setupTextViewerClickEvent();
     $textViewer.addEventListener('paste', handlePasteInTextViewer);
     $textViewer.addEventListener('focus', clearInitialTextViewerContent);
@@ -93,6 +149,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupFileListSortable();
     document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // --- URL/IFRAME 이벤트 설정 시작 ---
+    if ($loadUrlBtnMobile) {
+        $loadUrlBtnMobile.addEventListener('click', () => loadUrl($urlInputMobile.value, $contentFrameMobile));
+        $urlInputMobile.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadUrl($urlInputMobile.value, $contentFrameMobile);
+        });
+        
+        // [수정] 모바일 iframe 주소 변경 감지 리스너 추가
+        if ($contentFrameMobile) {
+            $contentFrameMobile.addEventListener('load', () => {
+                updateUrlInputOnIframeLoad($contentFrameMobile, $urlInputMobile);
+            });
+        }
+    }
+
+    if ($loadUrlBtnDesktop) {
+        $loadUrlBtnDesktop.addEventListener('click', () => loadUrl($urlInputDesktop.value, $contentFrameDesktop));
+        $urlInputDesktop.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadUrl($urlInputDesktop.value, $contentFrameDesktop);
+        });
+        
+        // [수정] 데스크톱 iframe 주소 변경 감지 리스너 추가
+        if ($contentFrameDesktop) {
+            $contentFrameDesktop.addEventListener('load', () => {
+                updateUrlInputOnIframeLoad($contentFrameDesktop, $urlInputDesktop);
+            });
+        }
+    }
+    // --- URL/IFRAME 이벤트 설정 끝 ---
 
     // 모바일 전용 버튼 설정
     if (isMobile) {
@@ -125,6 +211,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
+// --- URL 로드 함수 추가 ---
+function loadUrl(url, iframeElement) {
+    let finalUrl = url.trim();
+
+    if (finalUrl === "") {
+        alert("URL을 입력해 주세요.");
+        return;
+    }
+
+    // URL에 'http://' 또는 'https://'가 포함되어 있지 않다면 추가
+    if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
+        finalUrl = 'https://' + finalUrl;
+    }
+
+    // iframe의 src 속성을 입력된 URL로 변경
+    iframeElement.src = finalUrl;
+    
+    console.log("Iframe 주소 변경됨:", finalUrl);
+}
+
+// --- iframe 주소 변경 시 URL 입력창 업데이트 함수 추가 ---
+function updateUrlInputOnIframeLoad(iframeElement, urlInputElement) {
+    try {
+        // Same-Origin Policy 때문에 다른 도메인의 iframe URL 접근은 오류를 발생시킵니다.
+        // 접근이 가능한 경우(동일 도메인 또는 정책 허용)에만 URL을 업데이트합니다.
+        const iframeUrl = iframeElement.contentWindow.location.href;
+        
+        // about:blank는 건너뜁니다.
+        if (iframeUrl && iframeUrl !== 'about:blank') {
+            urlInputElement.value = iframeUrl;
+            console.log(`URL 입력창 업데이트됨 (동일 출처): ${iframeUrl}`);
+        }
+    } catch (e) {
+        // Cross-Origin (다른 도메인) 접근 시 발생하는 오류를 무시합니다.
+        console.warn("Iframe URL 접근 불가 (Same-Origin Policy 위반). URL 입력창은 업데이트되지 않았습니다.");
+        // 사용자에게 현재 iframe이 다른 도메인을 로드 중임을 알릴 수 있습니다.
+        // urlInputElement.value = "외부 페이지 (URL 접근 제한됨)"; 
+    }
+}
+// --- URL 로드 함수 끝 ---
 
 // --- 유틸리티 함수 ---
 function clearInitialTextViewerContent() {
@@ -168,7 +295,7 @@ async function handleVisibilityChange() {
 }
 
 window.addEventListener('beforeunload', () => {
-    saveBookmark();
+    saveBookmark(); // 파일 목록과 현재 위치를 포함하여 북마크 저장
     if (synth.speaking) {
         synth.cancel();
     }
@@ -223,24 +350,17 @@ function populateVoiceList() {
 
     koreanVoices.forEach(option => $voiceSelect.appendChild(option));
 
+    // loadBookmark에서 북마크 설정을 처리하고, 여기서는 Voice 선택만 처리합니다.
     const savedBookmark = JSON.parse(localStorage.getItem('autumnReaderBookmark'));
-    let selectedVoice = null;
-    
-    if (savedBookmark && savedBookmark.settings && $voiceSelect.querySelector(`option[value="${savedBookmark.settings.voice}"]`)) {
-        selectedVoice = savedBookmark.settings.voice;
-    } else if (preferredVoiceName) {
-        selectedVoice = preferredVoiceName;
-    } else if (koreanVoices.length > 0) {
-        selectedVoice = koreanVoices[0].value;
-    }
+    let selectedVoice = savedBookmark?.settings?.voice || preferredVoiceName || (koreanVoices.length > 0 ? koreanVoices[0].value : null);
 
-    if (selectedVoice) {
+    if (selectedVoice && $voiceSelect.querySelector(`option[value="${selectedVoice}"]`)) {
          $voiceSelect.value = selectedVoice;
+    } else if (koreanVoices.length > 0) {
+        $voiceSelect.value = koreanVoices[0].value;
     }
-
-    if (savedBookmark && savedBookmark.settings) {
-        $rateSlider.value = savedBookmark.settings.rate;
-    }
+    
+    // rate display 초기화는 loadBookmark에서 처리되거나, 처음 로드시 기본값으로 설정
     updateRateDisplay();
 }
 
@@ -554,15 +674,19 @@ function processFileChunks(fileIndex, startReading) {
     const file = filesData[fileIndex];
     if (!file || !file.isProcessed) return;
 
-    if (file.chunks.length > 0 && file.chunks[0] !== '') {
-        if (startReading && currentFileIndex === fileIndex) {
+    // 북마크 로드 시 이미 chunks가 채워져 있을 수 있습니다.
+    if (file.chunks.length > 0 && file.chunks[0] !== '' && !file.fullText) {
+         // fullText가 없는데 chunks가 있는 경우, 복원된 청크 사용
+         console.log(`[복원] 파일 "${file.name}" 복원된 청크 사용. 총 ${file.chunks.length}개 청크.`);
+         if (startReading && currentFileIndex === fileIndex) {
             renderTextViewer(fileIndex);
             startReadingFromCurrentChunk();
         }
         renderFileList();
         return;
     }
-
+    
+    // fullText가 없거나, fullText는 있는데 chunks가 비어있는 경우 (일반적인 처리)
     const text = file.fullText || '';
     if (!text) {
         file.isProcessed = true;
@@ -570,7 +694,7 @@ function processFileChunks(fileIndex, startReading) {
         console.warn(`파일 "${file.name}"의 텍스트가 비어 있습니다.`);
         if (startReading && currentFileIndex === fileIndex) {
             renderTextViewer(fileIndex);
-            startReadingFromCurrentChunk();
+            // startReadingFromCurrentChunk(); // 빈 파일은 재생하지 않음
         }
         renderFileList();
         return;
@@ -871,7 +995,7 @@ function clearAllFiles() {
     stopReading();
     filesData = [];
     currentFileIndex = -1;
-    localStorage.removeItem('autumnReaderBookmark');
+    localStorage.removeItem('autumnReaderBookmark'); // 북마크 전체 삭제
     renderFileList();
     $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
 }
@@ -1029,13 +1153,39 @@ function renderFileList() {
 
 // --- 북마크 ---
 function saveBookmark() {
-    if (currentFileIndex === -1) return;
+    // filesData가 비어있으면 전체 북마크를 삭제합니다.
+    if (filesData.length === 0) {
+        localStorage.removeItem('autumnReaderBookmark');
+        return;
+    }
+
+    // 파일 객체(fileObject)와 OCR 처리 중인 파일은 저장하지 않습니다.
+    const savableFilesData = filesData.filter(file => !file.isOcrProcessing).map(file => ({
+        id: file.id,
+        name: file.name,
+        // fullText는 용량이 크므로 isImage가 아니거나, isImage라도 처리가 완료된 경우만 저장
+        fullText: (!file.isImage || file.isProcessed) ? file.fullText : '', 
+        isImage: file.isImage, 
+        chunks: file.chunks, // 청크 저장
+        isProcessed: file.isProcessed,
+        isOcrProcessing: false 
+    }));
+    
+    // 현재 파일 인덱스가 유효한지 확인하고, 유효하지 않다면 0으로 설정
+    const effectiveFileIndex = currentFileIndex >= 0 && currentFileIndex < savableFilesData.length 
+        ? currentFileIndex 
+        : (savableFilesData.length > 0 ? 0 : -1);
+
+    if (effectiveFileIndex === -1) {
+        localStorage.removeItem('autumnReaderBookmark');
+        return;
+    }
 
     const bookmarkData = {
-        fileId: filesData[currentFileIndex].id,
-        fileName: filesData[currentFileIndex].name,
+        currentFileIndex: effectiveFileIndex,
         chunkIndex: currentChunkIndex,
         isSequential: isSequential,
+        files: savableFilesData, // 파일 목록 전체 저장
         settings: {
             voice: $voiceSelect.value,
             rate: $rateSlider.value
@@ -1049,6 +1199,8 @@ function loadBookmark() {
     if (!data) return;
 
     const bookmark = JSON.parse(data);
+    
+    // 1. 설정 로드
     if (bookmark.settings) {
         $rateSlider.value = bookmark.settings.rate;
         updateRateDisplay();
@@ -1058,4 +1210,72 @@ function loadBookmark() {
     if ($sequentialReadCheckbox) {
         $sequentialReadCheckbox.checked = isSequential;
     }
+
+    // 2. 파일 목록 복원
+    if (bookmark.files && bookmark.files.length > 0) {
+        filesData = bookmark.files.map(file => ({
+            ...file,
+            fileObject: null, 
+            isOcrProcessing: false // 복원 시 OCR 상태 초기화
+        }));
+        
+        renderFileList(); 
+
+        // 3. 이어듣기 프롬프트 및 재생 시작
+        const fileToResume = filesData[bookmark.currentFileIndex];
+        if (fileToResume && confirm(`지난번 읽던 파일: "${fileToResume.name}"의 ${bookmark.chunkIndex + 1}번째 부분부터 이어서 들으시겠습니까?`)) {
+            currentFileIndex = bookmark.currentFileIndex;
+            currentChunkIndex = bookmark.chunkIndex;
+            currentCharIndex = 0; 
+            
+            if (!fileToResume.isProcessed) {
+                 // 복원된 파일이 미처리 상태인 경우 (예: OCR이 필요한 이미지) 처리 시작
+                processFile(currentFileIndex, true); 
+            } else {
+                // 이미 청크까지 처리된 경우 바로 뷰어 렌더링 후 재생 시작
+                renderTextViewer(currentFileIndex);
+                startReadingFromCurrentChunk();
+            }
+            
+            renderFileList(); 
+            
+        } else {
+            // "아니오" 선택 시, 파일 목록은 유지하되, 현재 인덱스는 초기화
+            currentFileIndex = 0;
+            currentChunkIndex = 0;
+            currentCharIndex = 0;
+            if (filesData.length > 0) {
+                 renderTextViewer(currentFileIndex);
+                 renderFileList();
+            } else {
+                $textViewer.innerHTML = INITIAL_TEXT_VIEWER_CONTENT;
+            }
+        }
+    }
 }
+
+ // 토글 기능을 구현하는 함수
+        function togglePanel() {
+            // id가 "right_panel"인 요소 가져오기
+            const rightPanel = document.getElementById('right_panel');
+
+            // 현재 display 스타일 값 확인
+            if (rightPanel.style.display === 'none' || rightPanel.style.display === '') {
+                // 현재 숨겨져 있거나(none) 기본값인 경우, 'flex'로 변경하여 보이게 함
+                rightPanel.style.display = 'block';
+                console.log("패널이 'block'로 표시됩니다.");
+            } else {
+                // 현재 보이고 있는 경우, 'none'으로 변경하여 숨김
+                rightPanel.style.display = 'none';
+                console.log("패널이 'none'으로 숨겨집니다.");
+            }
+        }
+
+        // DOM이 로드된 후 이벤트 리스너 설정
+        window.onload = function() {
+            // id가 "right_button"인 요소 가져오기
+            const rightButton = document.getElementById('right_button');
+
+            // 버튼에 클릭 이벤트 리스너 추가
+            rightButton.addEventListener('click', togglePanel);
+        };
