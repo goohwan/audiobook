@@ -424,7 +424,7 @@ async function fetchAndProcessUrlContent(url) {
         const doc = parser.parseFromString(htmlText, 'text/html');
         
         // --- 요청에 따라 'option'과 '#viewcomment'를 추가하여 제거합니다. ---
-        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar, option, #viewcomment, .toon-nav, .modal';
+        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar, option, #viewcomment, .toon-nav, .modal, .widget-side-line';
         doc.querySelectorAll(selectorsToRemove).forEach(el => el.remove());
         // ------------------------------------------------------------------
         
