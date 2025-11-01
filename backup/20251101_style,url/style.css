@@ -40,7 +40,7 @@ max-height: 0px !important;
 /* --- Right Panel (iframe 및 URL 입력) --- */
 #right_panel {
     display:none;
-    width: 450px; /* 고정 폭 */
+    width: 550px; /* 고정 폭 */
     position: sticky; /* 데스크톱에서 오른쪽 상단에 고정 */
     float:left;
     height: 100vh; /* 화면 전체 높이 사용 */
