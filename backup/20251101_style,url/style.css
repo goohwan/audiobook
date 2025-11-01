@@ -391,7 +391,7 @@ h2 {
     }
     
     #rate-slider, #voice-select {
-        width: calc(100% - 25px);
+        width: calc(100% - 50px);
     }
     
     /* 모바일 전용 버튼 표시 */
