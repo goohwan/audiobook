@@ -86,12 +86,12 @@ max-height: 0px !important;
 }
 
 #content-frame-mobile, #content-frame-desktop {
-    width: 100%;
     border: 1px solid #667e91;
     background-color: #fff; /* 로딩 중 배경색 */
 }
 
 #content-frame-desktop {
+    width: 100%;
     height: calc(100vh - 120px); /* 화면 높이에서 상단 간격 및 입력창 높이를 뺀 값 */
 }
 
@@ -365,6 +365,7 @@ h2 {
         max-height: 50vh; /* 요청하신 화면의 50% 높이로 제한 */
         padding:0 20px 10px 0;
         resize: vertical;
+        width:95%;
     }
 
     .file-list-section, .text-viewer-section, .control-section {
