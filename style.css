@@ -31,12 +31,13 @@ header {
     margin-bottom: 20px;
 }
 
+/* 🟢 제목 색상 변경 */
 h1 {
-    color: #FFD700;
+    color: #66BB6A;
 }
 
 h2 {
-    color: #FFD700;
+    color: #66BB6A;
     margin-top: 0;
     border-bottom: 1px solid #4a4a4a;
     padding-bottom: 5px;
@@ -64,13 +65,13 @@ h2 {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.8);
-    color: #FFD700;
+    color: #66BB6A; /* 드롭 영역 테두리 색상 변경 */
     z-index: 1000;
     display: none;
     justify-content: center;
     align-items: center;
     font-size: 2em;
-    border: 5px dashed #FFD700;
+    border: 5px dashed #66BB6A; /* 드롭 영역 테두리 색상 변경 */
     pointer-events: auto;
     text-align: center;
 }
@@ -107,8 +108,9 @@ h2 {
     border-radius: 5px;
 }
 
+/* 🟢 버튼 기본 색상 변경 */
 .playback-controls button, #clear-all-files-btn {
-    background-color: #FFD700;
+    background-color: #66BB6A; 
     color: #2c2c2c;
     border: none;
     padding: 10px 15px;
@@ -124,8 +126,9 @@ h2 {
     border-radius: 5px;
 }
 
+/* 🟢 버튼 호버 색상 변경 */
 #play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover, #clear-all-files-btn:hover {
-    background-color: #FFC107;
+    background-color: #81C784;
 }
 
 /* --- File List Section (파일 목록) --- */
@@ -135,8 +138,9 @@ h2 {
     padding: 20px;
     border-radius: 8px;
 }
+/* 🟢 파일 목록 섹션 제목 색상 변경 */
 .file-list-section h2 {
-    color: #FFD700;
+    color: #66BB6A;
 }
 
 #file-list {
@@ -156,9 +160,10 @@ h2 {
     transition: background-color 0.2s;
 }
 
+/* 🟢 파일 목록 활성 색상 변경 */
 #file-list li.active {
-    background-color: #FFD700;
-    color: #2c2c2c;
+    background-color: #66BB6A;
+    color: #FFFFFF; /* 텍스트 흰색 */
     font-weight: bold;
 }
 
@@ -192,7 +197,7 @@ h2 {
 
 /* --- Text Viewer (읽기 모드 핵심 스타일) --- */
 #text-viewer {
-    background-color: #1e1e1e; /* Deep dark mode background (Screenshot style) */
+    background-color: #1e1e1e; /* Deep dark mode background */
     color: #f0f0f0; /* Light text */
     padding: 30px;
     border-radius: 8px;
@@ -225,10 +230,10 @@ h2 {
     background-color: #2a2a2a;
 }
 
-/* 현재 읽는 부분 강조 표시 (스크린샷의 강조 효과) */
+/* 🟢 현재 읽는 부분 저조도 그린 하이라이트 */
 .text-chunk.highlight {
-    background-color: #FFD700;
-    color: #1e1e1e; 
+    background-color: #4CAF50; /* 저조도 그린 계열 */
+    color: #FFFFFF; /* 텍스트는 흰색으로 하여 가독성 확보 */
     padding: 8px 5px;
     margin: -3px 0;
     font-weight: bold;
@@ -282,8 +287,10 @@ h2 {
         margin-bottom: 15px;
     }
 
+    /* 🟢 모바일 버튼 색상 변경 */
     .mobile-buttons button {
-        background-color: #FFD700;
+        background-color: #66BB6A;
+        color: #2c2c2c;
         border: none;
         padding: 12px;
         cursor: pointer;
