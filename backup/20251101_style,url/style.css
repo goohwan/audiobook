@@ -287,6 +287,8 @@ h2 {
     min-height: 200px; 
     line-height: 1.8;
     font-size: 1.1em;
+    padding:0 20px 10px 0;
+    resize: vertical;
 }
 
 .text-viewer-section h2 {
@@ -312,7 +314,7 @@ h2 {
 
 /* 현재 읽는 부분: 어둡고 차분한 청회색 하이라이트 */
 .text-chunk.highlight {
-    background-color: #2d3748; /* 아주 어두운 청회색 */
+    background-color: #1b2330; /* 아주 어두운 청회색 */
     color: #7a7e85; /* 하이라이트된 텍스트는 밝은 회색으로 가독성 확보 */
     padding: 8px 5px;
     margin: -3px 0;
@@ -352,7 +354,7 @@ h2 {
         order: -1; /* 텍스트 뷰어 위로 표시 */
         margin: 0 auto 20px auto;
         padding: 10px;
-        width: 100%;
+        width: 90%;
         max-width: 700px; /* left_panel의 max-width와 동일하게 설정 */
     }
 
@@ -360,6 +362,8 @@ h2 {
     #content-frame-mobile {
         height: auto;
         max-height: 50vh; /* 요청하신 화면의 50% 높이로 제한 */
+        padding:0 20px 10px 0;
+        resize: vertical;
     }
 
     .file-list-section, .text-viewer-section, .control-section {
