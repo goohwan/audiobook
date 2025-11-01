@@ -15,7 +15,7 @@ max-height: 0px !important;
 .container {    
     display: flex; 
     /* width: 95%; */ /* 너비는 left_panel과 right_panel이 채우도록 제거 */
-    max-width: 85%; /* 최대 너비를 100%로 설정하여 유연하게 만듬 */
+    max-width: 100%; /* 최대 너비를 100%로 설정하여 유연하게 만듬 */
     margin: 0 auto;
 }
 
@@ -25,12 +25,12 @@ max-height: 0px !important;
     padding: 0;
     box-sizing: border-box;
     max-width: 700px; /* left_panel 최대 너비 지정 */
-    margin: 0 0 0 auto; /* 중앙 정렬 */
+    margin: 0 auto; /* 중앙 정렬 */
 }
 
 /* --- Right Panel (iframe 및 URL 입력) --- */
 #right_panel {
-    width: 350px; /* 고정 폭 */
+    width: 650px; /* 고정 폭 */
     position: sticky; /* 데스크톱에서 오른쪽 상단에 고정 */
     top: 20px;
     height: 100vh; /* 화면 전체 높이 사용 */
@@ -121,6 +121,7 @@ h2 {
 }
 
 .disqus-section {
+    display:none;
     margin-top: 60px;
     width: 95%;
     margin: 60px auto 0 auto;
