@@ -1262,8 +1262,8 @@ function loadBookmark() {
             // 현재 display 스타일 값 확인
             if (rightPanel.style.display === 'none' || rightPanel.style.display === '') {
                 // 현재 숨겨져 있거나(none) 기본값인 경우, 'flex'로 변경하여 보이게 함
-                rightPanel.style.display = 'flex';
-                console.log("패널이 'flex'로 표시됩니다.");
+                rightPanel.style.display = 'block';
+                console.log("패널이 'block'로 표시됩니다.");
             } else {
                 // 현재 보이고 있는 경우, 'none'으로 변경하여 숨김
                 rightPanel.style.display = 'none';
