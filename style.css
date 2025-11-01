@@ -363,7 +363,7 @@ h2 {
     #content-frame-mobile {
         height: auto;
         max-height: 50vh; /* 요청하신 화면의 50% 높이로 제한 */
-        padding:0 20px 10px 0;
+        padding:0 auto;
         resize: vertical;
         width:95%;
     }
