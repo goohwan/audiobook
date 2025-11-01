@@ -423,8 +423,10 @@ async function fetchAndProcessUrlContent(url) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
         
-        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar';
+        // --- 요청에 따라 'option'과 '#viewcomment'를 추가하여 제거합니다. ---
+        const selectorsToRemove = 'script, style, link, header, footer, nav, aside, iframe, noscript, .ad, .advertisement, #comments, .sidebar, option, #viewcomment';
         doc.querySelectorAll(selectorsToRemove).forEach(el => el.remove());
+        // ------------------------------------------------------------------
         
         const contentCandidates = Array.from(doc.querySelectorAll('article, main, .post, .entry, .content, #content'));
         let bestText = '';
