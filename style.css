@@ -233,7 +233,7 @@ h2 {
 /* 현재 읽는 부분: 어둡고 차분한 청회색 하이라이트 */
 .text-chunk.highlight {
     background-color: #2d3748; /* 아주 어두운 청회색 */
-    color: #75797e; /* 하이라이트된 텍스트는 밝은 회색으로 가독성 확보 */
+    color: #e2e8f0; /* 하이라이트된 텍스트는 밝은 회색으로 가독성 확보 */
     padding: 8px 5px;
     margin: -3px 0;
     font-weight: bold;
