@@ -98,7 +98,7 @@
     <div class="container">
         <div id="left_panel">
             <div class="file-list-section">
-                <h2>Control Panel</h2>
+                <h2>List</h2>
                 <input type="file" id="file-input" accept="text/plain,image/*" multiple style="display: none;">
                 <ul id="file-list"></ul>
             </div>
@@ -129,31 +129,6 @@
                     <p>텍스트, 이미지 파일을 드래그하여 첨부하거나 텍스트/URL을 붙여넣어 오디오북으로 변환하세요! 모바일에선 파일첨부, 음성로드 버튼을 활용해주세요</p>
                 </div>
             </div>
-            
-            <div class="disqus-section">
-                <h2>대화</h2>
-                <div id="disqus_thread"></div>
-                <noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
-            </div>
-        </div>
-    </div>    
-    
-    <script>
-        /**
-         * Disqus configuration
-         */
-        var disqus_config = function () {
-            this.page.url = window.location.href;
-            this.page.identifier = 'gbookreader';
-        };
-        (function() {
-            var d = document, s = d.createElement('script');
-            s.src = 'https://gbookreader.disqus.com/embed.js';
-            s.setAttribute('data-timestamp', +new Date());
-            (d.head || d.body).appendChild(s);
-        })();
-    </script>
-    <script id="dsq-count-scr" src="//gbookreader.disqus.com/count.js" async></script>
     <script src="script.js"></script>
 </body>
 </html>
