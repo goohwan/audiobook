@@ -1,7 +1,7 @@
 body {
     font-family: Arial, sans-serif;
-    background-color: #2c2c2c; /* 다크 배경 */
-    color: #e0e0e0; /* 일반 텍스트 밝은 색 유지 */
+    background-color: #1a202c; /* Nightfall 배경: 아주 어두운 블루-그레이 */
+    color: #e2e8f0; /* 일반 텍스트: 밝은 회색 */
     margin: 0;
     padding: 20px 0px;
     overflow-x: hidden;
@@ -31,15 +31,15 @@ header {
     margin-bottom: 20px;
 }
 
-/* 🟢 제목 색상: 더 어두운 녹색 */
+/* 제목 색상: 중간 톤의 블루-그레이 */
 h1 {
-    color: #4CAF50;
+    color: #90a4ae; 
 }
 
 h2 {
-    color: #4CAF50;
+    color: #90a4ae;
     margin-top: 0;
-    border-bottom: 1px solid #4a4a4a;
+    border-bottom: 1px solid #4a5568; /* 구분선: 어두운 블루-그레이 */
     padding-bottom: 5px;
 }
 
@@ -65,13 +65,13 @@ h2 {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.8);
-    color: #4CAF50;
+    color: #90a4ae;
     z-index: 1000;
     display: none;
     justify-content: center;
     align-items: center;
     font-size: 2em;
-    border: 5px dashed #4CAF50;
+    border: 5px dashed #90a4ae;
     pointer-events: auto;
     text-align: center;
 }
@@ -83,7 +83,7 @@ h2 {
     gap: 15px;
     flex-wrap: wrap; 
     padding: 15px 20px;
-    background-color: #333; 
+    background-color: #2d3748; /* 컨트롤 배경: 어두운 블루-그레이 */
     border-radius: 8px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
@@ -102,16 +102,16 @@ h2 {
 
 #voice-select, #rate-slider {
     padding: 8px;
-    background-color: #4a4a4a;
-    border: 1px solid #666;
-    color: #e0e0e0;
+    background-color: #4a5568; /* 입력 필드 배경: 더 어두운 블루-그레이 */
+    border: 1px solid #667e91;
+    color: #e2e8f0;
     border-radius: 5px;
 }
 
-/* 🟢 버튼 기본 색상: 더 어두운 녹색 */
+/* 버튼 기본 색상: 중간 톤의 블루-그레이 */
 .playback-controls button, #clear-all-files-btn {
-    background-color: #4CAF50; 
-    color: #2c2c2c;
+    background-color: #6a809b; 
+    color: #1a202c; /* 버튼 텍스트: 아주 어두운 블루-그레이 */
     border: none;
     padding: 10px 15px;
     cursor: pointer;
@@ -126,21 +126,21 @@ h2 {
     border-radius: 5px;
 }
 
-/* 🟢 버튼 호버 색상: 중간 녹색 */
+/* 버튼 호버 색상: 약간 밝은 블루-그레이 */
 #play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover, #clear-all-files-btn:hover {
-    background-color: #66BB6A;
+    background-color: #7f97b5;
 }
 
 /* --- File List Section (파일 목록) --- */
 .file-list-section {
     margin-bottom: 20px;
-    background-color: #333;
+    background-color: #2d3748; /* 파일 목록 배경: 어두운 블루-그레이 */
     padding: 20px;
     border-radius: 8px;
 }
-/* 🟢 파일 목록 섹션 제목 색상: 더 어두운 녹색 */
+/* 파일 목록 섹션 제목 색상: 중간 톤의 블루-그레이 */
 .file-list-section h2 {
-    color: #4CAF50;
+    color: #90a4ae;
 }
 
 #file-list {
@@ -153,22 +153,22 @@ h2 {
     justify-content: space-between;
     align-items: center;
     padding: 10px;
-    background-color: #3a3a3a;
+    background-color: #3f4a5a; /* 목록 항목 배경: 약간 밝은 블루-그레이 */
     margin-bottom: 5px;
     border-radius: 5px;
     cursor: pointer;
     transition: background-color 0.2s;
 }
 
-/* 🟢 파일 목록 활성 색상: 더 어두운 녹색 */
+/* 파일 목록 활성 색상: 중간 톤의 블루-그레이 */
 #file-list li.active {
-    background-color: #4CAF50;
-    color: #FFFFFF;
+    background-color: #6a809b;
+    color: #1a202c; /* 활성 텍스트: 아주 어두운 블루-그레이 */
     font-weight: bold;
 }
 
 #file-list li:hover:not(.active) {
-    background-color: #4a4a4a;
+    background-color: #4a5568;
 }
 
 .file-controls {
@@ -177,8 +177,8 @@ h2 {
 }
 
 .drag-handle, .delete-file-btn {
-    background-color: #666;
-    color: #e0e0e0;
+    background-color: #5d6e7e;
+    color: #e2e8f0;
     border: none;
     padding: 5px 10px;
     cursor: pointer;
@@ -187,18 +187,18 @@ h2 {
 }
 
 .delete-file-btn:hover {
-    background-color: #ff4444;
+    background-color: #dc3545; /* 삭제 버튼은 붉은색 유지 */
 }
 
 .drag-handle:hover {
-    background-color: #888;
+    background-color: #6d7f8f;
 }
 
 
 /* --- Text Viewer (읽기 모드 핵심 스타일) --- */
 #text-viewer {
-    background-color: #1e1e1e; /* 텍스트 뷰어 배경: 깊은 다크 모드 */
-    color: #f0f0f0; /* 텍스트 색상: 밝게 유지하여 검은 배경과 대비 */
+    background-color: #2d3748; /* 텍스트 뷰어 배경: 어두운 블루-그레이 */
+    color: #e2e8f0; /* 텍스트 색상: 밝은 회색 */
     padding: 30px;
     border-radius: 8px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
@@ -227,13 +227,13 @@ h2 {
 }
 
 .text-chunk:hover {
-    background-color: #2a2a2a;
+    background-color: #3f4a5a;
 }
 
-/* 🟢 현재 읽는 부분: 가장 어두운 녹색 하이라이트 */
+/* 현재 읽는 부분: 어둡고 차분한 청회색 하이라이트 */
 .text-chunk.highlight {
-    background-color: #2E8B57; /* Sea Green: 어둡고 눈에 덜 띄는 녹색 */
-    color: #FFFFFF; /* 하이라이트된 텍스트는 흰색으로 가독성 확보 */
+    background-color: #4a5568; /* 아주 어두운 청회색 */
+    color: #e2e8f0; /* 하이라이트된 텍스트는 밝은 회색으로 가독성 확보 */
     padding: 8px 5px;
     margin: -3px 0;
     font-weight: bold;
@@ -287,10 +287,10 @@ h2 {
         margin-bottom: 15px;
     }
 
-    /* 🟢 모바일 버튼 색상: 더 어두운 녹색 */
+    /* 모바일 버튼 색상: 중간 톤의 블루-그레이 */
     .mobile-buttons button {
-        background-color: #4CAF50;
-        color: #2c2c2c;
+        background-color: #6a809b;
+        color: #1a202c;
         border: none;
         padding: 12px;
         cursor: pointer;
