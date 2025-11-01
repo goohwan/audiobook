@@ -89,6 +89,7 @@ max-height: 0px !important;
     width: 100%;
     border: 1px solid #667e91;
     background-color: #fff; /* 로딩 중 배경색 */
+    resize: vertical;
 }
 
 #content-frame-desktop {
@@ -287,6 +288,7 @@ h2 {
     min-height: 200px; 
     line-height: 1.8;
     font-size: 1.1em;
+    resize: vertical;
 }
 
 .text-viewer-section h2 {
@@ -312,7 +314,7 @@ h2 {
 
 /* 현재 읽는 부분: 어둡고 차분한 청회색 하이라이트 */
 .text-chunk.highlight {
-    background-color: #2d3748; /* 아주 어두운 청회색 */
+    background-color: #1b2330; /* 아주 어두운 청회색 */
     color: #7a7e85; /* 하이라이트된 텍스트는 밝은 회색으로 가독성 확보 */
     padding: 8px 5px;
     margin: -3px 0;
