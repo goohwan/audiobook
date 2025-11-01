@@ -199,7 +199,7 @@ h2 {
 #text-viewer {
     background-color: #2d3748; /* 텍스트 뷰어 배경: 어두운 블루-그레이 */
     color: #7a7e85; /* 텍스트 색상: 밝은 회색 */
-    padding: 30px;
+    padding: 10px;
     border-radius: 8px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
     max-height: 70vh;

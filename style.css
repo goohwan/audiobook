@@ -14,17 +14,87 @@ max-height: 0px !important;
 
 .container {    
     display: flex; 
-    flex-direction: column;
-    width: 95%;
-    max-width: 1000px;
+    /* width: 95%; */ /* 너비는 left_panel과 right_panel이 채우도록 제거 */
+    max-width: 100%; /* 최대 너비를 100%로 설정하여 유연하게 만듬 */
     margin: 0 auto;
 }
 
 #left_panel {   
-    width: 100%; 
+    flex: 1; /* 남은 공간을 모두 차지 */
+    min-width: 300px;
     padding: 0;
     box-sizing: border-box;
+    max-width: 700px; /* left_panel 최대 너비 지정 */
+    margin: 0 auto; /* 중앙 정렬 */
 }
+
+/* --- Right Panel (iframe 및 URL 입력) --- */
+#right_panel {
+    width: 350px; /* 고정 폭 */
+    position: sticky; /* 데스크톱에서 오른쪽 상단에 고정 */
+    top: 20px;
+    height: 100vh; /* 화면 전체 높이 사용 */
+    padding: 0 10px;
+    margin-left: 20px;
+    box-sizing: border-box;
+}
+
+.url-iframe-panel h2 {
+    margin-top: 0;
+    color: #90a4ae;
+    border-bottom: 1px solid #4a5568;
+    padding-bottom: 5px;
+}
+
+.url-input-container {
+    display: flex;
+    margin-bottom: 10px;
+}
+
+#url-input-mobile, #url-input-desktop {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #667e91;
+    background-color: #4a5568;
+    color: #e2e8f0;
+    border-radius: 5px 0 0 5px;
+    border-right: none;
+}
+
+#load-url-btn-mobile, #load-url-btn-desktop {
+    padding: 8px 15px;
+    background-color: #6a809b;
+    color: #1a202c;
+    border: none;
+    cursor: pointer;
+    border-radius: 0 5px 5px 0;
+    font-weight: bold;
+}
+
+#load-url-btn-mobile:hover, #load-url-btn-desktop:hover {
+    background-color: #7f97b5;
+}
+
+#content-frame-mobile, #content-frame-desktop {
+    width: 100%;
+    border: 1px solid #667e91;
+    background-color: #fff; /* 로딩 중 배경색 */
+}
+
+#content-frame-desktop {
+    height: calc(100vh - 120px); /* 화면 높이에서 상단 간격 및 입력창 높이를 뺀 값 */
+}
+
+/* 데스크톱 전용 및 모바일 전용 클래스 설정 */
+.desktop-only {
+    display: block;
+}
+
+.mobile-only {
+    display: none;
+}
+/* ------------------------------------------- */
+
 
 header {
     text-align: center;
@@ -47,7 +117,7 @@ h2 {
 .file-list-section, .text-viewer-section, .control-section {
     margin: 0 auto 30px auto; 
     padding: 0 10px; 
-    max-width: 800px; 
+    max-width: 700px; /* left_panel의 max-width와 동일하게 설정 */
 }
 
 .disqus-section {
@@ -199,7 +269,7 @@ h2 {
 #text-viewer {
     background-color: #2d3748; /* 텍스트 뷰어 배경: 어두운 블루-그레이 */
     color: #7a7e85; /* 텍스트 색상: 밝은 회색 */
-    padding: 30px;
+    padding: 10px;
     border-radius: 8px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
     max-height: 70vh;
@@ -241,15 +311,43 @@ h2 {
 
 
 /* --- Mobile Optimization (850px 이하) --- */
-.mobile-only {
-    display: none;
-}
-
 @media (max-width: 850px) { 
     .container {
+        flex-direction: column; /* 세로로 배치 */
         padding: 10px;
+        max-width: 100%;
     }
     
+    /* 데스크톱 전용 iframe 패널 숨기기 */
+    .desktop-only {
+        display: none !important;
+    }
+    
+    /* 모바일 전용 iframe 패널 표시 */
+    .mobile-only {
+        display: block;
+    }
+
+    #left_panel {
+        max-width: 100%; /* 모바일에서 전체 폭 사용 */
+        width: 100%;
+    }
+    
+    /* URL/iframe 패널 스타일 (모바일) */
+    #url_iframe_panel_mobile {
+        order: -1; /* 텍스트 뷰어 위로 표시 */
+        margin: 0 auto 20px auto;
+        padding: 10px;
+        width: 100%;
+        max-width: 700px; /* left_panel의 max-width와 동일하게 설정 */
+    }
+
+    /* 모바일 iframe 높이 제한 */
+    #content-frame-mobile {
+        height: auto;
+        max-height: 50vh; /* 요청하신 화면의 50% 높이로 제한 */
+    }
+
     .file-list-section, .text-viewer-section, .control-section {
         max-width: 100%;
         margin: 0 auto 20px auto;

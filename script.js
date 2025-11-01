@@ -1,3 +1,45 @@
+// --- index.html에서 이동된 XLSX 처리 유틸리티 ---
+var gk_isXlsx = false;
+var gk_xlsxFileLookup = {};
+var gk_fileData = {};
+function filledCell(cell) {
+  return cell !== '' && cell != null;
+}
+function loadFileData(filename) {
+if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+    try {
+        var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+        var firstSheetName = workbook.SheetNames[0];
+        var worksheet = workbook.Sheets[firstSheetName];
+
+        // Convert sheet to JSON to filter blank rows
+        var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+        // Filter out blank rows (rows where all cells are empty, null, or undefined)
+        var filteredData = jsonData.filter(row => row.some(filledCell));
+
+        // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+        var headerRowIndex = filteredData.findIndex((row, index) =>
+          row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+        );
+        // Fallback
+        if (headerRowIndex === -1 || headerRowIndex > 25) {
+          headerRowIndex = 0;
+        }
+
+        // Convert filtered JSON back to CSV
+        var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+        csv = XLSX.utils.utils.sheet_to_csv(csv, { header: 1 });
+        return csv;
+    } catch (e) {
+        console.error(e);
+        return "";
+    }
+}
+return gk_fileData[filename] || "";
+}
+// --------------------------------------------------
+
+
 // --- 전역 변수 설정 ---
 const MAX_FILES = 50; // 파일 첨부 최대 개수 50개
 const CHUNK_SIZE_LIMIT = 500; // 한 번에 발화할 텍스트의 최대 글자 수
@@ -30,6 +72,10 @@ const $ = (selector) => document.querySelector(selector);
 let $fileInput, $fullScreenDropArea, $fileList, $textViewer, $voiceSelect, $rateSlider, $rateDisplay, $playPauseBtn;
 let $sequentialReadCheckbox, $clearAllFilesBtn;
 
+// URL/IFRAME 관련 DOM 변수 추가
+let $urlInputMobile, $loadUrlBtnMobile, $contentFrameMobile;
+let $urlInputDesktop, $loadUrlBtnDesktop, $contentFrameDesktop;
+
 const INITIAL_TEXT_VIEWER_TEXT = '텍스트, 이미지 파일을 드래그하여 첨부하거나 텍스트/URL을 붙여넣어 오디오북으로 변환하세요! 모바일에선 파일첨부, 음성로드 버튼을 활용해주세요';
 const INITIAL_TEXT_VIEWER_CONTENT = `<p>${INITIAL_TEXT_VIEWER_TEXT}</p>`;
 
@@ -47,6 +93,14 @@ document.addEventListener('DOMContentLoaded', () => {
     $sequentialReadCheckbox = $('#sequential-read-checkbox');
     $clearAllFilesBtn = $('#clear-all-files-btn');
     
+    // URL/IFRAME DOM 요소 할당 (데스크톱 및 모바일)
+    $urlInputMobile = $('#url-input-mobile');
+    $loadUrlBtnMobile = $('#load-url-btn-mobile');
+    $contentFrameMobile = $('#content-frame-mobile');
+    $urlInputDesktop = $('#url-input-desktop');
+    $loadUrlBtnDesktop = $('#load-url-btn-desktop');
+    $contentFrameDesktop = $('#content-frame-desktop');
+
     if (!('speechSynthesis' in window)) {
         alert('Web Speech API를 지원하지 않는 브라우저입니다.');
         return;
@@ -96,6 +150,26 @@ document.addEventListener('DOMContentLoaded', () => {
     setupFileListSortable();
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // --- URL/IFRAME 이벤트 설정 ---
+    if ($loadUrlBtnMobile) {
+        $loadUrlBtnMobile.addEventListener('click', () => loadUrl($urlInputMobile.value, $contentFrameMobile));
+        $urlInputMobile.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadUrl($urlInputMobile.value, $contentFrameMobile);
+        });
+    }
+
+    if ($loadUrlBtnDesktop) {
+        $loadUrlBtnDesktop.addEventListener('click', () => loadUrl($urlInputDesktop.value, $contentFrameDesktop));
+        $urlInputDesktop.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadUrl($urlInputDesktop.value, $contentFrameDesktop);
+        });
+        
+        // 데스크톱 초기값 설정 및 로드 (선택 사항)
+        // $urlInputDesktop.value = "https://www.google.com";
+        // loadUrl($urlInputDesktop.value, $contentFrameDesktop); 
+    }
+    // --- URL/IFRAME 이벤트 설정 끝 ---
+
     // 모바일 전용 버튼 설정
     if (isMobile) {
         const $mobileFileUploadBtn = $('#mobile-file-upload-btn');
@@ -127,6 +201,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
+// --- URL 로드 함수 추가 ---
+function loadUrl(url, iframeElement) {
+    let finalUrl = url.trim();
+
+    if (finalUrl === "") {
+        alert("URL을 입력해 주세요.");
+        return;
+    }
+
+    // URL에 'http://' 또는 'https://'가 포함되어 있지 않다면 추가
+    if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
+        finalUrl = 'https://' + finalUrl;
+    }
+
+    // iframe의 src 속성을 입력된 URL로 변경
+    iframeElement.src = finalUrl;
+    
+    console.log("Iframe 주소 변경됨:", finalUrl);
+}
+// --- URL 로드 함수 끝 ---
 
 // --- 유틸리티 함수 ---
 function clearInitialTextViewerContent() {
