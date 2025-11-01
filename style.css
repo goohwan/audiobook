@@ -126,7 +126,7 @@ h2 {
 /* 섹션 중앙 정렬 및 가독성 폭 제한 */
 .file-list-section, .text-viewer-section, .control-section {
     margin: 0 auto 30px auto; 
-    padding: 0 10px; 
+    padding: 0; 
     max-width: 700px; /* left_panel의 max-width와 동일하게 설정 */
 }
 
