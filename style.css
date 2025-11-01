@@ -1,10 +1,11 @@
 body {
     font-family: Arial, sans-serif;
-    background-color: #2c2c2c;
+    background-color: #2c2c2c; /* Dark background */
     color: #e0e0e0;
     margin: 0;
     padding: 20px 0px;
     overflow-x: hidden;
+    line-height: 1.6; /* Improved readability */
 }
 
 div#disqus_thread iframe[sandbox] {
@@ -12,9 +13,10 @@ max-height: 0px !important;
 }
 
 .container {    
-    display: block; 
+    display: flex; 
+    flex-direction: column;
     width: 95%;
-    max-width: 800px;
+    max-width: 1000px; /* Slightly wider for better reading */
     margin: 0 auto;
 }
 
@@ -22,11 +24,6 @@ max-height: 0px !important;
     width: 100%; 
     padding: 0;
     box-sizing: border-box;
-}
-
-#disqus_thread {
-    min-height: 200px;
-    margin-top: 20px;
 }
 
 header {
@@ -38,16 +35,28 @@ h1 {
     color: #FFD700;
 }
 
-.file-list-section, .text-viewer-section, .control-section {
-    margin:0 30px 30px 0;
+h2 {
+    color: #FFD700;
+    margin-top: 0;
+    border-bottom: 1px solid #4a4a4a;
+    padding-bottom: 5px;
+}
 
+/* 섹션 중앙 정렬 및 가독성 폭 제한 */
+.file-list-section, .text-viewer-section, .control-section {
+    margin: 0 auto 30px auto; 
+    padding: 0 10px; 
+    max-width: 800px; 
 }
 
 .disqus-section {
-    margin-top:60px;
-    width:95%;
+    margin-top: 60px;
+    width: 95%;
+    margin: 60px auto 0 auto;
+    max-width: 800px;
 }
 
+/* --- Drop Area (기존 유지) --- */
 #full-screen-drop-area {
     position: fixed;
     top: 0;
@@ -66,11 +75,20 @@ h1 {
     text-align: center;
 }
 
+/* --- Controls Section (오디오 컨트롤) --- */
 .control-section {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 15px;
     flex-wrap: wrap; 
+    padding: 15px 20px;
+    background-color: #333; 
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.control-section h2 {
+    display: none; /* 컨트롤 섹션 제목 숨김 */
 }
 
 .playback-controls {
@@ -82,17 +100,20 @@ h1 {
 }
 
 #voice-select, #rate-slider {
-    padding: 5px;
+    padding: 8px;
     background-color: #4a4a4a;
     border: 1px solid #666;
     color: #e0e0e0;
+    border-radius: 5px;
 }
 
 .playback-controls button, #clear-all-files-btn {
     background-color: #FFD700;
+    color: #2c2c2c;
     border: none;
-    padding: 10px;
+    padding: 10px 15px;
     cursor: pointer;
+    font-weight: bold;
 }
 
 .playback-controls button {
@@ -105,6 +126,17 @@ h1 {
 
 #play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover, #clear-all-files-btn:hover {
     background-color: #FFC107;
+}
+
+/* --- File List Section (파일 목록) --- */
+.file-list-section {
+    margin-bottom: 20px;
+    background-color: #333;
+    padding: 20px;
+    border-radius: 8px;
+}
+.file-list-section h2 {
+    color: #FFD700;
 }
 
 #file-list {
@@ -121,14 +153,16 @@ h1 {
     margin-bottom: 5px;
     border-radius: 5px;
     cursor: pointer;
+    transition: background-color 0.2s;
 }
 
 #file-list li.active {
     background-color: #FFD700;
     color: #2c2c2c;
+    font-weight: bold;
 }
 
-#file-list li:hover {
+#file-list li:hover:not(.active) {
     background-color: #4a4a4a;
 }
 
@@ -139,10 +173,12 @@ h1 {
 
 .drag-handle, .delete-file-btn {
     background-color: #666;
+    color: #e0e0e0;
     border: none;
     padding: 5px 10px;
     cursor: pointer;
     border-radius: 3px;
+    transition: background-color 0.2s;
 }
 
 .delete-file-btn:hover {
@@ -153,40 +189,89 @@ h1 {
     background-color: #888;
 }
 
+
+/* --- Text Viewer (읽기 모드 핵심 스타일) --- */
 #text-viewer {
-    background-color: #3a3a3a;
-    padding: 20px;
-    border-radius: 5px;
-    max-height: 400px;
+    background-color: #1e1e1e; /* Deep dark mode background (Screenshot style) */
+    color: #f0f0f0; /* Light text */
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    max-height: 70vh; /* Increase max height for reading */
     overflow-y: auto;
-    min-height: 100px; 
+    min-height: 200px; 
+    line-height: 1.8; /* Excellent readability */
+    font-size: 1.1em;
+}
+
+.text-viewer-section h2 {
+    display: none; /* 텍스트 뷰어 제목 숨김 */
+}
+
+#text-viewer p {
+    margin: 0;
 }
 
 .text-chunk {
     display: block;
-    margin-bottom: 10px;
+    margin-bottom: 1em; /* 줄 간격 */
+    padding: 5px;
+    border-radius: 3px;
     cursor: pointer;
+    transition: background-color 0.1s;
 }
 
 .text-chunk:hover {
-    background-color: #4a4a4a;
+    background-color: #2a2a2a;
 }
 
+/* 현재 읽는 부분 강조 표시 (스크린샷의 강조 효과) */
 .text-chunk.highlight {
     background-color: #FFD700;
-    color: #2c2c2c;
+    color: #1e1e1e; 
+    padding: 8px 5px;
+    margin: -3px 0;
+    font-weight: bold;
 }
 
+
+/* --- Mobile Optimization (850px 이하) --- */
 .mobile-only {
     display: none;
 }
 
-@media (max-width: 1500px) and (min-width: 451px) {
+@media (max-width: 850px) { 
     .container {
-        max-width: 95%;
-        padding: 30px;
+        padding: 10px;
+    }
+    
+    .file-list-section, .text-viewer-section, .control-section {
+        max-width: 100%;
+        margin: 0 auto 20px auto;
+        padding: 10px;
     }
 
+    /* 컨트롤 요소를 세로로 배치하고 전체 폭 사용 */
+    .control-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 15px;
+    }
+
+    .playback-controls {
+        width: 100%;
+        margin-right: 0;
+    }
+    .playback-controls button {
+        flex-grow: 1; /* 버튼 가로 확장 */
+    }
+    
+    #rate-slider, #voice-select {
+        width: calc(100% - 10px);
+    }
+    
+    /* 모바일 전용 버튼 표시 */
     .mobile-only {
         display: block;
     }
@@ -194,52 +279,16 @@ h1 {
     .mobile-buttons {
         display: flex;
         gap: 10px;
-        margin-bottom: 10px;
+        margin-bottom: 15px;
     }
 
     .mobile-buttons button {
         background-color: #FFD700;
         border: none;
-        padding: 10px;
+        padding: 12px;
         cursor: pointer;
         border-radius: 5px;
         flex: 1;
+        font-weight: bold;
     }
-
-    .mobile-buttons button:hover {
-        background-color: #FFC107;
-    }
-}
-
-@media (max-width: 450px) {
-    .container {
-        max-width: 95%;
-        padding: 30px;
-    }
-
-    #left_pannel {
-        padding: 0;
-    }
-    .mobile-only {
-        display: block;
-    }
-
-    .mobile-buttons {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 10px;
-    }
-
-    .mobile-buttons button {
-        background-color: #FFD700;
-        border: none;
-        padding: 10px;
-        cursor: pointer;
-        border-radius: 5px;
-        flex: 1;
-    }
-
-    .mobile-buttons button:hover {
-        background-color: #FFC107;
-    }    
 }
