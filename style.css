@@ -344,6 +344,10 @@ h2 {
         width: 100%;
     }
     
+    #right_button{
+        display:none;
+    }
+
     /* URL/iframe 패널 스타일 (모바일) */
     #url_iframe_panel_mobile {
         order: -1; /* 텍스트 뷰어 위로 표시 */
