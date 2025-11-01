@@ -89,7 +89,6 @@ max-height: 0px !important;
     width: 100%;
     border: 1px solid #667e91;
     background-color: #fff; /* 로딩 중 배경색 */
-    resize: vertical;
 }
 
 #content-frame-desktop {
@@ -288,6 +287,7 @@ h2 {
     min-height: 200px; 
     line-height: 1.8;
     font-size: 1.1em;
+    padding:0 10px 10px 0;
     resize: vertical;
 }
 
@@ -362,6 +362,8 @@ h2 {
     #content-frame-mobile {
         height: auto;
         max-height: 50vh; /* 요청하신 화면의 50% 높이로 제한 */
+        padding:0 10px 10px 0;
+        resize: vertical;
     }
 
     .file-list-section, .text-viewer-section, .control-section {
