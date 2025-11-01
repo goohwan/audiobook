@@ -182,6 +182,11 @@ h2 {
     overflow: hidden; 
 }
 
+#rate-display {
+    display:block;
+    float:left;
+}
+
 #voice-select, #rate-slider {
     padding: 8px;
     background-color: #4a5568; /* 입력 필드 배경: 더 어두운 블루-그레이 */
