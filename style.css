@@ -127,7 +127,8 @@ h2 {
 .file-list-section, .text-viewer-section, .control-section {
     margin: 0 auto 30px auto; 
     padding: 0; 
-    max-width: 700px; /* left_panel의 max-width와 동일하게 설정 */
+    width:95%;
+    max-width: 850px; /* left_panel의 max-width와 동일하게 설정 */
 }
 
 .disqus-section {
