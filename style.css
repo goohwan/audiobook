@@ -31,10 +31,8 @@ max-height: 0px !important;
 #right_button {
     width: 50px; /* 고정 폭 */
     position: sticky; /* 데스크톱에서 오른쪽 상단에 고정 */
-    top: 20px;
     height: 100vh; /* 화면 전체 높이 사용 */
-    padding: 0 10px;
-    margin-left: 20px;
+    padding: 45% 10px;    
     box-sizing: border-box;
 }
 
