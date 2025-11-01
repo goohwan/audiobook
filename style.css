@@ -370,7 +370,7 @@ h2 {
         max-height: 50vh; /* 요청하신 화면의 50% 높이로 제한 */
         padding:0 auto;
         resize: vertical;
-        width:95%;
+        width:100%;
     }
 
     .file-list-section, .text-viewer-section, .control-section {
