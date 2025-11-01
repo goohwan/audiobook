@@ -28,9 +28,19 @@ max-height: 0px !important;
     margin: 0 auto; /* 중앙 정렬 */
 }
 
+#right_button {
+    width: 50px; /* 고정 폭 */
+    position: sticky; /* 데스크톱에서 오른쪽 상단에 고정 */
+    top: 20px;
+    height: 100vh; /* 화면 전체 높이 사용 */
+    padding: 0 10px;
+    margin-left: 20px;
+    box-sizing: border-box;
+}
+
 /* --- Right Panel (iframe 및 URL 입력) --- */
 #right_panel {
-    width: 650px; /* 고정 폭 */
+    width: 450px; /* 고정 폭 */
     position: sticky; /* 데스크톱에서 오른쪽 상단에 고정 */
     top: 20px;
     height: 100vh; /* 화면 전체 높이 사용 */
