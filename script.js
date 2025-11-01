@@ -1253,3 +1253,29 @@ function loadBookmark() {
         }
     }
 }
+
+ // 토글 기능을 구현하는 함수
+        function togglePanel() {
+            // id가 "right_panel"인 요소 가져오기
+            const rightPanel = document.getElementById('right_panel');
+
+            // 현재 display 스타일 값 확인
+            if (rightPanel.style.display === 'none' || rightPanel.style.display === '') {
+                // 현재 숨겨져 있거나(none) 기본값인 경우, 'flex'로 변경하여 보이게 함
+                rightPanel.style.display = 'flex';
+                console.log("패널이 'flex'로 표시됩니다.");
+            } else {
+                // 현재 보이고 있는 경우, 'none'으로 변경하여 숨김
+                rightPanel.style.display = 'none';
+                console.log("패널이 'none'으로 숨겨집니다.");
+            }
+        }
+
+        // DOM이 로드된 후 이벤트 리스너 설정
+        window.onload = function() {
+            // id가 "right_button"인 요소 가져오기
+            const rightButton = document.getElementById('right_button');
+
+            // 버튼에 클릭 이벤트 리스너 추가
+            rightButton.addEventListener('click', togglePanel);
+        };
