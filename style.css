@@ -14,86 +14,41 @@ max-height: 0px !important;
 
 .container {    
     display: flex; 
-    /* width: 95%; */ /* 너비는 left_panel과 right_panel이 채우도록 제거 */
-    max-width: 100%; /* 최대 너비를 100%로 설정하여 유연하게 만듬 */
+    flex-direction: column;
+    width: 95%;
+    max-width: 1000px;
     margin: 0 auto;
 }
 
+/* 메인 콘텐츠를 위한 유연한 컨테이너 (PC에서 사용) */
+.main-flex-container {
+    display: flex;
+    transition: all 0.3s ease-in-out;
+}
+
+/* Left Panel (기존 콘텐츠) */
 #left_panel {   
-    flex: 1; /* 남은 공간을 모두 차지 */
-    min-width: 300px;
+    flex-grow: 1; 
     padding: 0;
     box-sizing: border-box;
-    max-width: 700px; /* left_panel 최대 너비 지정 */
-    margin: 0 auto; /* 중앙 정렬 */
+    min-width: 0; /* flex item overflow fix */
+    transition: width 0.3s ease-in-out, max-width 0.3s ease-in-out;
 }
 
-/* --- Right Panel (iframe 및 URL 입력) --- */
+/* Right Panel (새로 추가) */
 #right_panel {
-    width: 350px; /* 고정 폭 */
-    position: sticky; /* 데스크톱에서 오른쪽 상단에 고정 */
-    top: 20px;
-    height: 100vh; /* 화면 전체 높이 사용 */
-    padding: 0 10px;
-    margin-left: 20px;
+    background-color: #2d3748; /* 어두운 블루-그레이 */
+    padding: 15px;
     box-sizing: border-box;
+    overflow-y: auto;
+    transition: all 0.3s ease-in-out;
+    border-radius: 8px;
+    margin-left: 10px;
 }
-
-.url-iframe-panel h2 {
-    margin-top: 0;
-    color: #90a4ae;
+#right_panel h2 {
+    color: #48bb78; /* 라이트 그린 */
     border-bottom: 1px solid #4a5568;
-    padding-bottom: 5px;
 }
-
-.url-input-container {
-    display: flex;
-    margin-bottom: 10px;
-}
-
-#url-input-mobile, #url-input-desktop {
-    flex-grow: 1;
-    padding: 8px;
-    border: 1px solid #667e91;
-    background-color: #4a5568;
-    color: #e2e8f0;
-    border-radius: 5px 0 0 5px;
-    border-right: none;
-}
-
-#load-url-btn-mobile, #load-url-btn-desktop {
-    padding: 8px 15px;
-    background-color: #6a809b;
-    color: #1a202c;
-    border: none;
-    cursor: pointer;
-    border-radius: 0 5px 5px 0;
-    font-weight: bold;
-}
-
-#load-url-btn-mobile:hover, #load-url-btn-desktop:hover {
-    background-color: #7f97b5;
-}
-
-#content-frame-mobile, #content-frame-desktop {
-    width: 100%;
-    border: 1px solid #667e91;
-    background-color: #fff; /* 로딩 중 배경색 */
-}
-
-#content-frame-desktop {
-    height: calc(100vh - 120px); /* 화면 높이에서 상단 간격 및 입력창 높이를 뺀 값 */
-}
-
-/* 데스크톱 전용 및 모바일 전용 클래스 설정 */
-.desktop-only {
-    display: block;
-}
-
-.mobile-only {
-    display: none;
-}
-/* ------------------------------------------- */
 
 
 header {
@@ -111,274 +66,288 @@ h2 {
     margin-top: 0;
     border-bottom: 1px solid #4a5568; /* 구분선: 어두운 블루-그레이 */
     padding-bottom: 5px;
+    margin-bottom: 15px;
 }
 
-/* 섹션 중앙 정렬 및 가독성 폭 제한 */
-.file-list-section, .text-viewer-section, .control-section {
-    margin: 0 auto 30px auto; 
-    padding: 0 10px; 
-    max-width: 700px; /* left_panel의 max-width와 동일하게 설정 */
-}
-
-.disqus-section {
-    margin-top: 60px;
-    width: 95%;
-    margin: 60px auto 0 auto;
-    max-width: 800px;
-}
-
-/* --- Drop Area --- */
-#full-screen-drop-area {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
-    color: #90a4ae;
-    z-index: 1000;
-    display: none;
-    justify-content: center;
-    align-items: center;
-    font-size: 2em;
-    border: 5px dashed #90a4ae;
-    pointer-events: auto;
-    text-align: center;
-}
-
-/* --- Controls Section (오디오 컨트롤) --- */
-.control-section {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    flex-wrap: wrap; 
-    padding: 15px 20px;
-    background-color: #2d3748; /* 컨트롤 배경: 어두운 블루-그레이 */
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-}
-
-.control-section h2 {
-    display: none;
-}
-
-.playback-controls {
-    display: flex;
-    gap: 0;
-    margin-right: 10px;
-    border-radius: 5px; 
-    overflow: hidden; 
-}
-
-#voice-select, #rate-slider {
-    padding: 8px;
-    background-color: #4a5568; /* 입력 필드 배경: 더 어두운 블루-그레이 */
-    border: 1px solid #667e91;
-    color: #e2e8f0;
-    border-radius: 5px;
-}
-
-/* 버튼 기본 색상: 중간 톤의 블루-그레이 */
-.playback-controls button, #clear-all-files-btn {
-    background-color: #6a809b; 
-    color: #1a202c; /* 버튼 텍스트: 아주 어두운 블루-그레이 */
-    border: none;
-    padding: 10px 15px;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.playback-controls button {
-    border-radius: 0;
-}
-
-#clear-all-files-btn {
-    border-radius: 5px;
-}
-
-/* 버튼 호버 색상: 약간 밝은 블루-그레이 */
-#play-pause-btn:hover, #stop-btn:hover, #prev-file-btn:hover, #next-file-btn:hover, #clear-all-files-btn:hover {
-    background-color: #7f97b5;
-}
-
-/* --- File List Section (파일 목록) --- */
-.file-list-section {
-    margin-bottom: 20px;
-    background-color: #2d3748; /* 파일 목록 배경: 어두운 블루-그레이 */
-    padding: 20px;
-    border-radius: 8px;
-}
-/* 파일 목록 섹션 제목 색상: 중간 톤의 블루-그레이 */
-.file-list-section h2 {
-    color: #90a4ae;
-}
-
+/* --- 파일 목록 스타일링 --- */
 #file-list {
     list-style: none;
     padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #4a5568;
+    border-radius: 6px;
+    margin-top: 10px;
 }
 
 #file-list li {
+    padding: 10px 15px;
+    border-bottom: 1px solid #4a5568;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px;
-    background-color: #3f4a5a; /* 목록 항목 배경: 약간 밝은 블루-그레이 */
-    margin-bottom: 5px;
-    border-radius: 5px;
     cursor: pointer;
     transition: background-color 0.2s;
+    font-size: 0.9em;
 }
 
-/* 파일 목록 활성 색상: 중간 톤의 블루-그레이 */
-#file-list li.active {
-    background-color: #6a809b;
-    color: #1a202c; /* 활성 텍스트: 아주 어두운 블루-그레이 */
+#file-list li.current-file {
+    background-color: #4a5568; /* 현재 파일 강조 */
     font-weight: bold;
+    color: #63b3ed; /* 라이트 블루 */
 }
 
-#file-list li:hover:not(.active) {
-    background-color: #4a5568;
+#file-list li:hover:not(.current-file) {
+    background-color: #2d3748; /* 호버 배경색 */
 }
 
-.file-controls {
-    display: flex;
-    gap: 5px;
-}
-
-.drag-handle, .delete-file-btn {
-    background-color: #5d6e7e;
-    color: #e2e8f0;
+#file-list li button {
+    background: none;
     border: none;
-    padding: 5px 10px;
+    color: #f7fafc; /* 밝은 텍스트 */
     cursor: pointer;
-    border-radius: 3px;
-    transition: background-color 0.2s;
-}
-
-.delete-file-btn:hover {
-    background-color: #dc3545; /* 삭제 버튼은 붉은색 유지 */
-}
-
-.drag-handle:hover {
-    background-color: #6d7f8f;
-}
-
-
-/* --- Text Viewer (읽기 모드 핵심 스타일) --- */
-#text-viewer {
-    background-color: #2d3748; /* 텍스트 뷰어 배경: 어두운 블루-그레이 */
-    color: #7a7e85; /* 텍스트 색상: 밝은 회색 */
-    padding: 10px;
-    border-radius: 8px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-    max-height: 70vh;
-    overflow-y: auto;
-    min-height: 200px; 
-    line-height: 1.8;
     font-size: 1.1em;
+    padding: 5px;
+    line-height: 1;
 }
 
-.text-viewer-section h2 {
-    display: none;
+/* OCR 상태 표시 */
+.ocr-status {
+    font-size: 0.8em;
+    color: #ecc94b; /* 노란색 */
+    margin-left: 10px;
+}
+
+/* --- 드래그 & 드롭 영역 --- */
+#drop-area {
+    border: 2px dashed #4a5568;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 20px;
+    background-color: #2d3748;
+    transition: border-color 0.3s;
+}
+
+#drop-area.highlight {
+    border-color: #48bb78; /* 하이라이트: 라이트 그린 */
+}
+
+/* --- 텍스트 뷰어 --- */
+#text-viewer {
+    min-height: 300px;
+    padding: 15px;
+    border: 1px solid #4a5568;
+    border-radius: 8px;
+    background-color: #2d3748;
+    white-space: pre-wrap;
+    overflow-y: auto;
+    cursor: text;
+    user-select: text;
 }
 
 #text-viewer p {
     margin: 0;
+    padding: 0;
 }
 
-.text-chunk {
-    display: block;
-    margin-bottom: 1em;
-    padding: 5px;
+/* 현재 재생 중인 텍스트 하이라이트 */
+.highlight-chunk {
+    background-color: #4299e1; /* 블루 */
+    color: #1a202c; /* 어두운 텍스트 */
+    padding: 2px 4px;
     border-radius: 3px;
-    cursor: pointer;
     transition: background-color 0.1s;
 }
 
-.text-chunk:hover {
-    background-color: #3f4a5a;
+.highlight-char {
+    background-color: #68d391; /* 라이트 그린 */
+    color: #1a202c;
+    font-weight: bold;
 }
 
-/* 현재 읽는 부분: 어둡고 차분한 청회색 하이라이트 */
-.text-chunk.highlight {
-    background-color: #2d3748; /* 아주 어두운 청회색 */
-    color: #7a7e85; /* 하이라이트된 텍스트는 밝은 회색으로 가독성 확보 */
-    padding: 8px 5px;
-    margin: -3px 0;
-    border:solid 0.5px #667e91;
+/* --- 컨트롤 섹션 --- */
+.control-section {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 15px 0;
+    border-bottom: 1px solid #4a5568;
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* 작은 화면에서 컨트롤이 줄 바꿈되도록 */
 }
 
+.control-section label {
+    font-weight: bold;
+    color: #90a4ae;
+}
 
-/* --- Mobile Optimization (850px 이하) --- */
-@media (max-width: 850px) { 
+#voice-select, #rate-slider {
+    background-color: #4a5568;
+    border: 1px solid #63b3ed;
+    color: #e2e8f0;
+    padding: 8px;
+    border-radius: 5px;
+}
+
+#rate-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 8px;
+    cursor: pointer;
+}
+
+#rate-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #63b3ed;
+    cursor: pointer;
+}
+
+.playback-controls {
+    display: flex;
+    gap: 10px;
+    margin-right: 20px;
+}
+
+.playback-controls button, #clear-all-files-btn {
+    background-color: #48bb78; /* 라이트 그린 */
+    color: #1a202c; /* 어두운 텍스트 */
+    border: none;
+    padding: 10px 15px;
+    cursor: pointer;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.playback-controls button:hover, #clear-all-files-btn:hover {
+    background-color: #68d391;
+    transform: translateY(-1px);
+}
+.playback-controls button:active, #clear-all-files-btn:active {
+    transform: translateY(0);
+}
+
+/* 정주행 체크박스 스타일링 */
+.control-section input[type="checkbox"] {
+    margin-left: 10px;
+    accent-color: #48bb78;
+}
+
+/* 모바일 전용 요소 숨김 */
+.mobile-only {
+    display: none;
+}
+.pc-only {
+    display: block;
+}
+
+/* --- 토글 버튼 스타일링 (PC Only) --- */
+#pc-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px; /* 버튼 자체의 너비 */
+    height: 100%; /* 부모 높이만큼 확장 */
+    min-height: 400px;
+    padding: 0;
+    margin: 0 5px;
+    background-color: #4a5568;
+    color: #e2e8f0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+    position: sticky;
+    top: 20px; /* 헤더 아래에 고정되도록 */
+}
+
+#pc-toggle-btn .icon {
+    font-size: 1.5em;
+    transition: transform 0.3s ease-in-out;
+    line-height: 1;
+}
+
+#pc-toggle-btn:hover {
+    background-color: #63b3ed; /* 호버: 라이트 블루 */
+}
+
+/* Right Panel이 열렸을 때 (PC) */
+.panel-expanded #pc-toggle-btn .icon {
+    transform: rotate(180deg); /* 아이콘을 왼쪽으로 회전 */
+}
+
+/* Right Panel이 닫혔을 때 (PC) */
+.panel-collapsed #pc-toggle-btn .icon {
+    transform: rotate(0deg); /* 아이콘을 오른쪽으로 */
+}
+
+/* PC 레이아웃 (768px 이상) */
+@media (min-width: 768px) {
     .container {
-        flex-direction: column; /* 세로로 배치 */
-        padding: 10px;
-        max-width: 100%;
+        /* main-flex-container가 수평으로 배치되므로 container의 max-width를 늘릴 필요가 있음 */
+        max-width: 1200px; 
     }
     
-    /* 데스크톱 전용 iframe 패널 숨기기 */
-    .desktop-only {
+    .main-flex-container {
+        flex-direction: row;
+        align-items: flex-start; /* 상단 정렬 */
+    }
+
+    /* 초기 상태: Right Panel 닫힘 */
+    .panel-collapsed #left_panel {
+        flex-basis: 100%; /* Left Panel이 전체 너비 사용 */
+        max-width: 100%;
+    }
+    .panel-collapsed #right_panel {
+        max-width: 0; /* 너비를 0으로 축소 */
+        padding: 0;
+        margin-left: 0;
+        visibility: hidden; /* 보이지 않게 */
+        flex-basis: 0; 
+    }
+
+    /* 확장 상태: Right Panel 열림 */
+    .panel-expanded #left_panel {
+        flex-basis: 70%; /* Left Panel 70% */
+        max-width: 70%;
+    }
+    .panel-expanded #right_panel {
+        flex-basis: 30%; /* Right Panel 30% */
+        max-width: 30%;
+        padding: 15px;
+        visibility: visible;
+        margin-left: 10px;
+    }
+    
+    #left_panel {
+        /* 기존 left_panel 스타일 유지 */
+        width: auto;
+    }
+}
+
+
+/* 모바일 레이아웃 (767px 이하) */
+@media (max-width: 767px) {
+    .container {
+        padding: 10px;
+    }
+
+    /* PC 전용 요소 숨김 */
+    .pc-only {
         display: none !important;
     }
-    
-    /* 모바일 전용 iframe 패널 표시 */
-    .mobile-only {
-        display: block;
-    }
 
-    #left_panel {
-        max-width: 100%; /* 모바일에서 전체 폭 사용 */
-        width: 100%;
-    }
-    
-    /* URL/iframe 패널 스타일 (모바일) */
-    #url_iframe_panel_mobile {
-        order: -1; /* 텍스트 뷰어 위로 표시 */
-        margin: 0 auto 20px auto;
-        padding: 10px;
-        width: 100%;
-        max-width: 700px; /* left_panel의 max-width와 동일하게 설정 */
-    }
-
-    /* 모바일 iframe 높이 제한 */
-    #content-frame-mobile {
-        height: auto;
-        max-height: 50vh; /* 요청하신 화면의 50% 높이로 제한 */
-    }
-
-    .file-list-section, .text-viewer-section, .control-section {
-        max-width: 100%;
-        margin: 0 auto 20px auto;
-        padding: 10px;
-    }
-
-    /* 컨트롤 요소를 세로로 배치하고 전체 폭 사용 */
-    .control-section {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-        padding: 15px;
-    }
-
-    .playback-controls {
-        width: 100%;
-        margin-right: 0;
-    }
-    .playback-controls button {
-        flex-grow: 1;
-    }
-    
-    #rate-slider, #voice-select {
-        width: calc(100% - 10px);
-    }
-    
     /* 모바일 전용 버튼 표시 */
     .mobile-only {
         display: block;
     }
-
+    
     .mobile-buttons {
         display: flex;
         gap: 10px;
@@ -396,6 +365,69 @@ h2 {
         flex: 1;
         font-weight: bold;
     }
+
+    /* Left Panel은 항상 100% */
+    #left_panel {
+        width: 100%;
+    }
+    
+    /* --- 모바일 토글 버튼 스타일링 --- */
+    #mobile-toggle-btn {
+        width: 100%;
+        background-color: #4a5568;
+        color: #e2e8f0;
+        border: none;
+        padding: 12px;
+        cursor: pointer;
+        border-radius: 5px;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+
+    /* 모바일 확장 상태 */
+    .panel-expanded #left_panel {
+        display: none; /* Left Panel을 숨기고 */
+    }
+    .panel-expanded #right_panel {
+        width: 100%; /* Right Panel이 전체 화면 차지 */
+        max-width: 100%;
+        margin-left: 0;
+        padding: 15px;
+        position: fixed; /* 전체 화면 덮기 */
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10;
+        background-color: #1a202c; /* 전체 배경색과 동일하게 */
+        border-radius: 0;
+        visibility: visible;
+    }
+    
+    /* 모바일 축소 상태 */
+    .panel-collapsed #left_panel {
+        width: 100%;
+        display: block; /* Left Panel 표시 */
+    }
+    .panel-collapsed #right_panel {
+        max-width: 0;
+        padding: 0;
+        visibility: hidden;
+        margin-left: 0;
+        width: 0;
+    }
+    
+    /* 모바일 토글 버튼 텍스트 변경 */
+    .panel-expanded #mobile-toggle-btn {
+        /* 확장 상태에서는 버튼이 숨겨지므로 이 스타일은 중요하지 않지만, 일관성을 위해 */
+        display: none; 
+    }
+
+    /* 모바일에서 right panel이 닫혀있을 때 버튼 텍스트 */
+    .panel-collapsed #mobile-toggle-btn::after {
+        content: " (Right Panel 열기)";
+    }
+    /* 모바일에서 right panel이 열려있을 때 버튼 텍스트는 JS에서 처리합니다. */
 }
 
 
@@ -403,25 +435,25 @@ h2 {
 /* --- Scrollbar Customization (Nightfall) --- */
 /* -------------------------------------- */
 
-/* 스크롤바 너비/높이 지정 */
-#text-viewer::-webkit-scrollbar {
+/* 스크롤바 너비/높이 */
+::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
 
-/* 스크롤바 배경 트랙 */
-#text-viewer::-webkit-scrollbar-track {
-    background: #2d3748; /* 컨트롤 배경색과 유사하게 설정 */
+/* 스크롤바 트랙 */
+::-webkit-scrollbar-track {
+    background: #2d3748; /* 어두운 트랙 */
     border-radius: 10px;
 }
 
-/* 스크롤바 핸들 (실제 움직이는 부분) */
-#text-viewer::-webkit-scrollbar-thumb {
-    background-color: #4a5568; /* 하이라이트 배경색과 유사하게 설정 */
+/* 스크롤바 핸들 */
+::-webkit-scrollbar-thumb {
+    background: #4a5568; /* 중간 톤 핸들 */
     border-radius: 10px;
 }
 
-/* 스크롤바 핸들 호버 시 */
-#text-viewer::-webkit-scrollbar-thumb:hover {
-    background-color: #6a809b; /* 버튼 기본 색상과 유사하게 설정 */
+/* 스크롤바 핸들 호버 */
+::-webkit-scrollbar-thumb:hover {
+    background: #63b3ed; /* 라이트 블루 호버 */
 }
